@@ -67,12 +67,16 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main className="flex-1 flex flex-col items-center justify-center px-4 py-10 court-grid">
-      <div className="w-full max-w-sm animate-fade-up">
+    <main className="relative flex-1 flex flex-col items-center justify-center px-4 py-10 court-grid glow-scene overflow-hidden">
+      <div
+        aria-hidden
+        className="absolute -top-32 left-1/2 -translate-x-1/2 size-96 rounded-full bg-lime/10 blur-[100px] pointer-events-none"
+      />
+      <div className="relative w-full max-w-sm animate-scale-in">
         <div className="flex justify-center mb-8">
           <Logo />
         </div>
-        <div className="bg-surface border border-border rounded-(--radius-card) p-6">
+        <div className="gradient-border rounded-(--radius-card) p-6">
           <h1 className="text-xl font-extrabold mb-1">Content de te revoir</h1>
           <p className="text-sm text-ink-muted mb-6">
             Connecte-toi pour organiser ou suivre tes parties.

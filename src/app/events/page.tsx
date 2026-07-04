@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { FORMAT_LABELS, STATUS_LABELS, formatDate } from "@/lib/utils";
 import type { PadelEvent } from "@/lib/types";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
-import { Badge, Button, EmptyState, PageLoader } from "@/components/ui";
+import { Badge, Button, EmptyState, SkeletonList } from "@/components/ui";
 
 type EventWithCount = PadelEvent & { event_players: Array<{ count: number }>; mine: boolean };
 
@@ -60,7 +60,7 @@ export default function EventsPage() {
       <TopBar title="Mes événements" />
       <AppPage>
         {events === null ? (
-          <PageLoader />
+          <SkeletonList rows={4} height="h-24" />
         ) : events.length === 0 ? (
           <EmptyState
             icon={<CalendarX className="size-6" />}
@@ -74,11 +74,11 @@ export default function EventsPage() {
           />
         ) : (
           <ul className="flex flex-col gap-3">
-            {events.map((e) => (
-              <li key={e.id}>
+            {events.map((e, i) => (
+              <li key={e.id} className="stagger-i" style={{ "--i": Math.min(i, 10) } as React.CSSProperties}>
                 <Link
                   href={e.mine ? `/events/${e.id}` : `/join/${e.share_code}`}
-                  className="flex items-center gap-3 bg-surface border border-border rounded-(--radius-card) p-4 transition-all duration-150 hover:border-border-strong active:scale-[0.99]"
+                  className="group flex items-center gap-3 bg-surface border border-border rounded-(--radius-card) p-4 card-lift"
                 >
                   <div className="flex-1 min-w-0">
                     <p className="font-bold truncate">{e.name}</p>
@@ -97,7 +97,10 @@ export default function EventsPage() {
                     </div>
                     <p className="text-xs text-ink-faint mt-1.5">{formatDate(e.created_at)}</p>
                   </div>
-                  <ChevronRight className="size-5 text-ink-faint shrink-0" aria-hidden />
+                  <ChevronRight
+                    className="size-5 text-ink-faint shrink-0 transition-transform group-hover:translate-x-1 group-hover:text-lime"
+                    aria-hidden
+                  />
                 </Link>
               </li>
             ))}

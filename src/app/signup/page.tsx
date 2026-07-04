@@ -51,12 +51,16 @@ export default function SignupPage() {
   }
 
   return (
-    <main className="flex-1 flex flex-col items-center justify-center px-4 py-10 court-grid">
-      <div className="w-full max-w-sm animate-fade-up">
+    <main className="relative flex-1 flex flex-col items-center justify-center px-4 py-10 court-grid glow-scene overflow-hidden">
+      <div
+        aria-hidden
+        className="absolute -top-32 left-1/2 -translate-x-1/2 size-96 rounded-full bg-lime/10 blur-[100px] pointer-events-none"
+      />
+      <div className="relative w-full max-w-sm animate-scale-in">
         <div className="flex justify-center mb-8">
           <Logo />
         </div>
-        <div className="bg-surface border border-border rounded-(--radius-card) p-6">
+        <div className="gradient-border rounded-(--radius-card) p-6">
           {awaitingConfirm ? (
             <div className="flex flex-col items-center text-center gap-3 py-4">
               <div className="size-14 rounded-2xl bg-lime/10 border border-lime/25 flex items-center justify-center">

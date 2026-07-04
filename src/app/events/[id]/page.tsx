@@ -19,6 +19,7 @@ import { FORMAT_LABELS, friendlyError } from "@/lib/utils";
 import type { Match } from "@/lib/types";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
 import { Avatar, Badge, Button, EmptyState, Input, PageLoader, Segmented } from "@/components/ui";
+import { useEscapeClose } from "@/components/motion";
 import { MatchCard } from "@/components/match-card";
 import { ScoreSheet } from "@/components/score-sheet";
 import { Standings } from "@/components/standings";
@@ -45,6 +46,9 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
     const map = new Map(players.map((p) => [p.id, p.display_name]));
     return (pid: string | null) => (pid ? (map.get(pid) ?? null) : null);
   }, [players]);
+
+  useEscapeClose(confirmAction !== null, () => setConfirmAction(null));
+  useEscapeClose(showQR, () => setShowQR(false));
 
   if (loading) {
     return (
@@ -288,13 +292,14 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                   })}
                 </div>
 
-                {roundMatches.map((m) => (
-                  <MatchCard
-                    key={m.id}
-                    match={m}
-                    playerName={playerName}
-                    onClick={isActive ? () => setScoringMatch(m) : undefined}
-                  />
+                {roundMatches.map((m, i) => (
+                  <div key={m.id} className="stagger-i" style={{ "--i": i } as React.CSSProperties}>
+                    <MatchCard
+                      match={m}
+                      playerName={playerName}
+                      onClick={isActive ? () => setScoringMatch(m) : undefined}
+                    />
+                  </div>
                 ))}
 
                 {restingIds.length > 0 && (
@@ -381,8 +386,8 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
       {/* Confirmation destructive */}
       {confirmAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-5" role="dialog" aria-modal="true">
-          <button aria-label="Annuler" className="absolute inset-0 bg-black/70 cursor-pointer" onClick={() => setConfirmAction(null)} />
-          <div className="relative bg-surface border border-border rounded-3xl p-6 w-full max-w-sm animate-fade-up">
+          <button aria-label="Annuler" className="absolute inset-0 bg-black/70 cursor-pointer animate-backdrop" onClick={() => setConfirmAction(null)} />
+          <div className="relative bg-surface border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-in">
             <h2 className="text-lg font-extrabold mb-2">
               {confirmAction === "delete" ? "Supprimer l'événement ?" : "Terminer l'événement ?"}
             </h2>

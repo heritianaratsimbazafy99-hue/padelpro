@@ -14,15 +14,15 @@ type ButtonSize = "sm" | "md" | "lg";
 
 const buttonVariants: Record<ButtonVariant, string> = {
   primary:
-    "bg-lime text-on-lime font-bold hover:bg-lime-deep active:scale-[0.98] disabled:opacity-40",
+    "btn-shine bg-lime text-on-lime font-bold hover:bg-lime-deep hover:shadow-[0_0_28px_-6px_rgba(200,245,66,0.5)] hover:-translate-y-px active:translate-y-0 active:scale-[0.98] disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-none",
   secondary:
-    "bg-surface-3 text-ink font-semibold hover:bg-border-strong active:scale-[0.98] disabled:opacity-40",
+    "bg-surface-3 text-ink font-semibold hover:bg-border-strong hover:-translate-y-px active:translate-y-0 active:scale-[0.98] disabled:opacity-40",
   ghost:
     "bg-transparent text-ink-muted font-semibold hover:text-ink hover:bg-surface-2 active:scale-[0.98] disabled:opacity-40",
   danger:
     "bg-danger/10 text-danger font-semibold border border-danger/30 hover:bg-danger/20 active:scale-[0.98] disabled:opacity-40",
   outline:
-    "bg-transparent text-ink font-semibold border border-border-strong hover:border-lime hover:text-lime active:scale-[0.98] disabled:opacity-40",
+    "bg-transparent text-ink font-semibold border border-border-strong hover:border-lime hover:text-lime hover:-translate-y-px active:translate-y-0 active:scale-[0.98] disabled:opacity-40",
 };
 
 const buttonSizes: Record<ButtonSize, string> = {
@@ -44,7 +44,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       disabled={disabled || loading}
       className={cx(
-        "inline-flex items-center justify-center cursor-pointer select-none transition-all duration-150",
+        "inline-flex items-center justify-center cursor-pointer select-none transition-all duration-200",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime",
         buttonVariants[variant],
         buttonSizes[size],
@@ -76,8 +76,7 @@ export function Card({
       onClick={onClick}
       className={cx(
         "bg-surface border border-border rounded-(--radius-card) p-4",
-        onClick &&
-          "cursor-pointer transition-all duration-150 hover:border-border-strong active:scale-[0.99]",
+        onClick && "cursor-pointer card-lift",
         className,
       )}
     >
@@ -308,9 +307,30 @@ export function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md"
 
 export function PageLoader({ label = "Chargement…" }: { label?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-24 text-ink-muted">
-      <Loader2 className="size-7 animate-spin text-lime" aria-hidden />
+    <div className="flex flex-col items-center justify-center gap-4 py-24 text-ink-muted" role="status">
+      <div className="flex flex-col items-center" aria-hidden>
+        <span className="size-4 rounded-full bg-lime animate-ball-bounce shadow-[0_0_16px_rgba(200,245,66,0.5)]" />
+        <span className="mt-1.5 h-1 w-6 rounded-full bg-lime/40 blur-[2px] animate-shadow-squash" />
+      </div>
       <p className="text-sm font-medium">{label}</p>
+    </div>
+  );
+}
+
+/* ---------- Skeletons ---------- */
+
+/** Bloc de chargement scintillant, à dimensionner via className. */
+export function Skeleton({ className }: { className?: string }) {
+  return <div aria-hidden className={cx("skeleton", className)} />;
+}
+
+/** Squelette d'une liste de cartes (événements, historique…). */
+export function SkeletonList({ rows = 3, height = "h-20" }: { rows?: number; height?: string }) {
+  return (
+    <div className="flex flex-col gap-3" role="status" aria-label="Chargement">
+      {Array.from({ length: rows }, (_, i) => (
+        <Skeleton key={i} className={cx("w-full rounded-(--radius-card)", height)} />
+      ))}
     </div>
   );
 }
@@ -331,7 +351,7 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center text-center gap-3 py-14 px-6">
       {icon && (
-        <div className="size-14 rounded-2xl bg-surface-2 border border-border flex items-center justify-center text-ink-faint">
+        <div className="size-14 rounded-2xl bg-surface-2 border border-border flex items-center justify-center text-ink-faint animate-float">
           {icon}
         </div>
       )}

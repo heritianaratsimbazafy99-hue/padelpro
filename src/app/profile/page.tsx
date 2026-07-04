@@ -10,7 +10,8 @@ import { usePlayerStats } from "@/lib/use-stats";
 import { usePlayerHistory } from "@/lib/use-history";
 import { FORMAT_LABELS, formatDate } from "@/lib/utils";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
-import { Avatar, Badge, Button, EmptyState, Field, Input, PageLoader } from "@/components/ui";
+import { Avatar, Badge, Button, EmptyState, Field, Input, PageLoader, SkeletonList } from "@/components/ui";
+import { CountUp } from "@/components/motion";
 
 export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
@@ -66,13 +67,18 @@ export default function ProfilePage() {
     );
   }
 
-  const statCards = [
-    { icon: TrendingUp, label: "Elo global", value: elo ?? "–" },
-    { icon: Swords, label: "Matchs joués", value: stats?.matches ?? "–" },
-    { icon: Trophy, label: "Victoires", value: stats?.wins ?? "–" },
-    { icon: Percent, label: "Taux de victoire", value: stats ? `${stats.winRate}%` : "–" },
-    { icon: Medal, label: "Événements", value: stats?.events ?? "–" },
-    { icon: History, label: "Défaites", value: stats?.losses ?? "–" },
+  const statCards: Array<{
+    icon: typeof TrendingUp;
+    label: string;
+    value: number | undefined | null;
+    suffix?: string;
+  }> = [
+    { icon: TrendingUp, label: "Elo global", value: elo },
+    { icon: Swords, label: "Matchs joués", value: stats?.matches },
+    { icon: Trophy, label: "Victoires", value: stats?.wins },
+    { icon: Percent, label: "Taux de victoire", value: stats?.winRate, suffix: "%" },
+    { icon: Medal, label: "Événements", value: stats?.events },
+    { icon: History, label: "Défaites", value: stats?.losses },
   ];
 
   return (
@@ -92,13 +98,16 @@ export default function ProfilePage() {
             Carrière
           </h2>
           <div className="grid grid-cols-2 gap-3">
-            {statCards.map(({ icon: Icon, label, value }) => (
+            {statCards.map(({ icon: Icon, label, value, suffix }, i) => (
               <div
                 key={label}
-                className="bg-surface border border-border rounded-(--radius-card) p-4 flex flex-col gap-2"
+                className="stagger-i bg-surface border border-border rounded-(--radius-card) p-4 flex flex-col gap-2 card-lift"
+                style={{ "--i": i } as React.CSSProperties}
               >
                 <Icon className="size-5 text-lime" aria-hidden />
-                <p className="tnum text-2xl font-extrabold">{value}</p>
+                <p className="tnum text-2xl font-extrabold">
+                  {value === undefined || value === null ? "–" : <CountUp value={value} suffix={suffix ?? ""} />}
+                </p>
                 <p className="text-xs text-ink-faint font-semibold">{label}</p>
               </div>
             ))}
@@ -118,7 +127,7 @@ export default function ProfilePage() {
             Historique des matchs
           </h2>
           {history === null ? (
-            <PageLoader label="" />
+            <SkeletonList rows={3} height="h-24" />
           ) : history.length === 0 ? (
             <EmptyState
               icon={<History className="size-6" />}
@@ -127,10 +136,11 @@ export default function ProfilePage() {
             />
           ) : (
             <ul className="flex flex-col gap-2">
-              {history.map((h) => (
+              {history.map((h, i) => (
                 <li
                   key={h.matchId}
-                  className="bg-surface border border-border rounded-(--radius-card) px-4 py-3"
+                  className="stagger-i bg-surface border border-border rounded-(--radius-card) px-4 py-3"
+                  style={{ "--i": Math.min(i, 10) } as React.CSSProperties}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <span className="flex items-center gap-2 min-w-0">

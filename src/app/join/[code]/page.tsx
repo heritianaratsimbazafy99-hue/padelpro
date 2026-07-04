@@ -118,11 +118,11 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
           <h1 className="text-2xl font-extrabold mb-1">{event.name}</h1>
           <p className="text-ink-muted mb-6">Qui es-tu ? Sélectionne ton nom pour continuer.</p>
           <ul className="flex flex-col gap-2">
-            {players.map((p) => (
-              <li key={p.id}>
+            {players.map((p, i) => (
+              <li key={p.id} className="stagger-i" style={{ "--i": Math.min(i, 12) } as React.CSSProperties}>
                 <button
                   onClick={() => selectIdentity(p.id)}
-                  className="w-full flex items-center gap-3 bg-surface border border-border rounded-(--radius-card) px-4 py-3.5 cursor-pointer transition-all duration-150 hover:border-lime/50 active:scale-[0.99]"
+                  className="w-full flex items-center gap-3 bg-surface border border-border rounded-(--radius-card) px-4 py-3.5 cursor-pointer card-lift"
                 >
                   <Avatar name={p.display_name} />
                   <span className="flex-1 text-left font-bold">{p.display_name}</span>
@@ -196,8 +196,9 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
           <>
             {/* Mon prochain match */}
             {myNextMatch ? (
-              <section className="mb-6">
-                <h2 className="text-sm font-extrabold uppercase tracking-wider text-lime mb-2.5">
+              <section className="mb-6 animate-fade-up">
+                <h2 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider text-lime mb-2.5">
+                  <span className="size-2 rounded-full bg-lime animate-pulse-soft" aria-hidden />
                   Ton prochain match
                 </h2>
                 <MatchCard
@@ -247,15 +248,16 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
                         a.round_number - b.round_number ||
                         a.court - b.court,
                     )
-                    .map((m) => (
-                      <MatchCard
-                        key={m.id}
-                        match={m}
-                        playerName={playerName}
-                        meId={meId}
-                        roundTag={`Round ${m.round_number}`}
-                        onClick={m.status === "pending" ? () => setScoringMatch(m) : undefined}
-                      />
+                    .map((m, i) => (
+                      <div key={m.id} className="stagger-i" style={{ "--i": Math.min(i, 8) } as React.CSSProperties}>
+                        <MatchCard
+                          match={m}
+                          playerName={playerName}
+                          meId={meId}
+                          roundTag={`Round ${m.round_number}`}
+                          onClick={m.status === "pending" ? () => setScoringMatch(m) : undefined}
+                        />
+                      </div>
                     ))}
                 </div>
               ))}
