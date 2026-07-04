@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PadelPro 🎾
 
-## Getting Started
+Webapp mobile-first pour organiser des **americanos, mexicanos et tournois de padel** :
+rotations équitables, équipes équilibrées, QR code pour les joueurs, scores et classement en
+temps réel, comptes joueurs avec statistiques.
 
-First, run the development server:
+**Production : https://padelpro-five.vercel.app**
+
+## Stack
+
+- **Next.js 16** (App Router, TypeScript, Tailwind CSS v4) — déployé sur **Vercel**
+- **Supabase** — Postgres + RLS, Auth (email/mot de passe), Realtime
+- `qrcode.react`, `lucide-react`, police Plus Jakarta Sans
+
+## Formats de jeu
+
+| Format | Fonctionnement |
+|---|---|
+| **Americano** | Tournoi individuel. Tous les rounds sont générés au lancement avec une rotation optimisée : aucun partenaire répété tant qu'une alternative existe, adversaires variés, repos répartis (écart max 1). Score individuel = points cumulés. |
+| **Mexicano** | Round 1 aléatoire ou par niveau, puis chaque round est formé d'après le classement : dans chaque groupe de 4, le 1ᵉʳ joue avec le 4ᵉ contre 2ᵉ + 3ᵉ. |
+| **Tournoi** | Équipes fixes (composition aléatoire ou équilibrée par niveau), tableau à élimination directe avec placement standard des têtes de série et byes automatiques. Le vainqueur est propagé dans le bracket par la base (RPC). |
+
+Le moteur (`src/lib/engine/`) est couvert par des tests : `node --test src/lib/engine/engine.test.ts`.
+
+## Flux QR
+
+1. L'organisateur crée l'événement et saisit les joueurs.
+2. Il partage le QR code (ou le code à 6 caractères) → `/join/[code]`.
+3. Chaque joueur sélectionne son nom, voit son prochain match, annonce les scores.
+4. S'il est connecté, sa fiche est liée à son compte → statistiques persistantes.
+
+## Sécurité
+
+- RLS : lecture publique des données de scoreboard, écriture réservée à l'organisateur.
+- Les participants (même anonymes) écrivent uniquement via les RPC `report_score` /
+  `claim_player` (SECURITY DEFINER), validées par le `share_code` et les règles du format
+  (total de points exact, pas d'égalité en tournoi).
+
+## Développement
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Variables dans `.env.local` (des fallbacks publics existent dans `src/lib/supabase/config.ts`) :
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Le schéma SQL de référence est dans `supabase/migrations/`.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> Note : la confirmation d'email est activée par défaut sur Supabase. Pour des inscriptions
+> instantanées : Dashboard Supabase → Authentication → Sign In / Up → Email → désactiver
+> « Confirm email ».
