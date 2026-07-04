@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, Home, Plus, Trophy, User } from "lucide-react";
+import { ArrowLeft, Home, Medal, Plus, Trophy, User } from "lucide-react";
 import { Logo } from "./logo";
 import type { ReactNode } from "react";
 
@@ -41,8 +41,9 @@ export function TopBar({
 
 const navItems = [
   { href: "/dashboard", label: "Accueil", icon: Home },
-  { href: "/events/new", label: "Créer", icon: Plus },
   { href: "/events", label: "Événements", icon: Trophy },
+  { href: "/events/new", label: "Créer", icon: Plus },
+  { href: "/leaderboard", label: "Classement", icon: Medal },
   { href: "/profile", label: "Profil", icon: User },
 ];
 
@@ -54,7 +55,7 @@ export function BottomNav() {
       aria-label="Navigation principale"
       className="fixed bottom-0 inset-x-0 z-40 bg-background/90 backdrop-blur-lg border-t border-border pb-safe"
     >
-      <div className="mx-auto max-w-2xl grid grid-cols-4">
+      <div className="mx-auto max-w-2xl grid grid-cols-5">
         {navItems.map(({ href, label, icon: Icon }) => {
           const active =
             href === "/events"

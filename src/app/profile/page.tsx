@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, LogOut, Medal, Percent, Swords, Trophy } from "lucide-react";
+import { Check, History, LogOut, Medal, Percent, Swords, TrendingUp, Trophy } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { usePlayerStats } from "@/lib/use-stats";
+import { usePlayerHistory } from "@/lib/use-history";
+import { FORMAT_LABELS, formatDate } from "@/lib/utils";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
-import { Avatar, Button, Field, Input, PageLoader } from "@/components/ui";
+import { Avatar, Badge, Button, EmptyState, Field, Input, PageLoader } from "@/components/ui";
 
 export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
@@ -16,7 +19,9 @@ export default function ProfilePage() {
   const [name, setName] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [elo, setElo] = useState<number | null>(null);
   const stats = usePlayerStats(user?.id ?? null);
+  const history = usePlayerHistory(user?.id ?? null);
 
   useEffect(() => {
     (async () => {
@@ -25,12 +30,13 @@ export default function ProfilePage() {
       } = await supabase.auth.getUser();
       if (!user) return;
       setUser(user);
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", user.id)
-        .maybeSingle();
+      const [{ data: profile }, { data: board }] = await Promise.all([
+        supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+        supabase.rpc("global_leaderboard"),
+      ]);
       setName(profile?.display_name ?? "");
+      const mine = (board ?? []).find((r: { p_id: string }) => r.p_id === user.id);
+      setElo(mine ? mine.p_elo : null);
     })();
   }, [supabase]);
 
@@ -61,10 +67,12 @@ export default function ProfilePage() {
   }
 
   const statCards = [
+    { icon: TrendingUp, label: "Elo global", value: elo ?? "–" },
     { icon: Swords, label: "Matchs joués", value: stats?.matches ?? "–" },
     { icon: Trophy, label: "Victoires", value: stats?.wins ?? "–" },
     { icon: Percent, label: "Taux de victoire", value: stats ? `${stats.winRate}%` : "–" },
     { icon: Medal, label: "Événements", value: stats?.events ?? "–" },
+    { icon: History, label: "Défaites", value: stats?.losses ?? "–" },
   ];
 
   return (
@@ -97,8 +105,63 @@ export default function ProfilePage() {
           </div>
           <p className="text-xs text-ink-faint mt-3 leading-relaxed">
             Tes stats se remplissent automatiquement quand tu sélectionnes ton nom dans un événement
-            en étant connecté.
+            en étant connecté.{" "}
+            <Link href="/leaderboard" className="text-lime hover:underline">
+              Voir le classement global
+            </Link>
           </p>
+        </section>
+
+        {/* Historique détaillé */}
+        <section className="mb-7">
+          <h2 className="text-sm font-extrabold uppercase tracking-wider text-ink-faint mb-3">
+            Historique des matchs
+          </h2>
+          {history === null ? (
+            <PageLoader label="" />
+          ) : history.length === 0 ? (
+            <EmptyState
+              icon={<History className="size-6" />}
+              title="Aucun match joué"
+              body="Rejoins un événement via QR code en étant connecté : chaque match apparaîtra ici."
+            />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {history.map((h) => (
+                <li
+                  key={h.matchId}
+                  className="bg-surface border border-border rounded-(--radius-card) px-4 py-3"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="flex items-center gap-2 min-w-0">
+                      <Badge
+                        tone={h.result === "win" ? "success" : h.result === "loss" ? "danger" : "muted"}
+                      >
+                        {h.result === "win" ? "Victoire" : h.result === "loss" ? "Défaite" : "Nul"}
+                      </Badge>
+                      <span className="tnum text-base font-extrabold shrink-0">
+                        {h.myScore}–{h.theirScore}
+                      </span>
+                    </span>
+                    <span className="text-xs text-ink-faint shrink-0">{formatDate(h.playedAt)}</span>
+                  </div>
+                  <p className="text-sm text-ink-muted truncate">
+                    {h.partner ? (
+                      <>
+                        Avec <span className="text-ink font-semibold">{h.partner}</span> contre{" "}
+                      </>
+                    ) : (
+                      <>Contre </>
+                    )}
+                    <span className="text-ink font-semibold">{h.opponents.join(" & ")}</span>
+                  </p>
+                  <p className="text-xs text-ink-faint mt-1 truncate">
+                    {FORMAT_LABELS[h.eventFormat]} · {h.eventName} · Round {h.round}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <section className="mb-7">
