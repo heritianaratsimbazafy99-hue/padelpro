@@ -1,26 +1,133 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #06080f;
+  --surface: #0c111e;
+  --surface-2: #121a2c;
+  --surface-3: #1a2440;
+  --border: #1e293e;
+  --border-strong: #2c3a58;
+  --ink: #f2f5fa;
+  --ink-muted: #93a0b8;
+  --ink-faint: #5c6b87;
+  --lime: #c8f542;
+  --lime-deep: #a8d92a;
+  --on-lime: #0a0f04;
+  --success: #34d399;
+  --danger: #fb7185;
+  --warning: #fbbf24;
+  --info: #60a5fa;
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-lime: var(--lime);
+  --color-lime-deep: var(--lime-deep);
+  --color-on-lime: var(--on-lime);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
+  --radius-card: 1.25rem;
+  --radius-field: 0.875rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Court-line decorative background for hero sections */
+.court-grid {
+  background-image:
+    linear-gradient(to right, rgba(200, 245, 66, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(200, 245, 66, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.glow-lime {
+  box-shadow: 0 0 40px -8px rgba(200, 245, 66, 0.35);
+}
+
+/* Tabular figures for scores and timers */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Safe-area support for fixed bottom bars */
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.75rem);
+}
+
+input,
+select,
+textarea {
+  font-size: 16px; /* prevents iOS auto-zoom on focus */
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out both;
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+::selection {
+  background: rgba(200, 245, 66, 0.3);
 }

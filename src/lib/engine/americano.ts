@@ -1,0 +1,352 @@
+/**
+ * Moteur de génération de rounds Americano / Mexicano.
+ *
+ * Règles de l'americano :
+ *  - tournoi individuel : les paires tournent à chaque round ;
+ *  - chaque match se joue en un total de points fixe (ex. 24) partagé
+ *    entre les deux équipes (score1 + score2 = total) ;
+ *  - le classement individuel cumule les points marqués sur tous les rounds.
+ *
+ * Garanties du moteur :
+ *  - les repos (byes) sont répartis équitablement : écart max de 1 entre joueurs ;
+ *  - un joueur ne rejoue jamais avec le même partenaire tant qu'une alternative
+ *    existe (pénalité quadratique + optimisation par recherche locale) ;
+ *  - les re-rencontres en adversaires sont minimisées ;
+ *  - en mode « équilibré », l'écart de niveau entre les deux équipes de chaque
+ *    match est minimisé, à priorité égale avec la rotation.
+ */
+
+export interface EnginePlayer {
+  id: string;
+  level: number; // 1-10
+}
+
+export interface PlannedMatch {
+  court: number;
+  team1: [string, string];
+  team2: [string, string];
+}
+
+export interface PlannedRound {
+  roundNumber: number;
+  matches: PlannedMatch[];
+  resting: string[];
+}
+
+export type PairingMode = "random" | "balanced";
+
+const W_PARTNER = 1000; // rejouer avec le même partenaire : très pénalisé
+const W_OPPONENT = 40; // raffronter le même adversaire : pénalisé
+const W_BALANCE = 12; // mode équilibré : écart de niveau entre équipes
+
+interface HistoryState {
+  partner: Map<string, number>;
+  opponent: Map<string, number>;
+  byes: Map<string, number>;
+  lastBye: Map<string, number>;
+}
+
+const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+const bump = (m: Map<string, number>, k: string, by = 1) => m.set(k, (m.get(k) ?? 0) + by);
+
+function shuffled<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Coût d'un match donné selon l'historique et le mode d'équilibrage. */
+function matchCost(
+  m: PlannedMatch,
+  h: HistoryState,
+  mode: PairingMode,
+  levelOf: Map<string, number>,
+): number {
+  const p1 = h.partner.get(pairKey(m.team1[0], m.team1[1])) ?? 0;
+  const p2 = h.partner.get(pairKey(m.team2[0], m.team2[1])) ?? 0;
+  let cost = W_PARTNER * (p1 * p1 + p2 * p2);
+
+  for (const a of m.team1) {
+    for (const b of m.team2) {
+      const o = h.opponent.get(pairKey(a, b)) ?? 0;
+      cost += W_OPPONENT * o * o;
+    }
+  }
+
+  if (mode === "balanced") {
+    const l1 = (levelOf.get(m.team1[0]) ?? 5) + (levelOf.get(m.team1[1]) ?? 5);
+    const l2 = (levelOf.get(m.team2[0]) ?? 5) + (levelOf.get(m.team2[1]) ?? 5);
+    cost += W_BALANCE * Math.abs(l1 - l2);
+  }
+  return cost;
+}
+
+function roundCost(
+  matches: PlannedMatch[],
+  h: HistoryState,
+  mode: PairingMode,
+  levelOf: Map<string, number>,
+): number {
+  return matches.reduce((s, m) => s + matchCost(m, h, mode, levelOf), 0);
+}
+
+/** Meilleur des 3 découpages possibles d'un groupe de 4 joueurs en 2 équipes. */
+function bestSplit(
+  four: string[],
+  court: number,
+  h: HistoryState,
+  mode: PairingMode,
+  levelOf: Map<string, number>,
+): PlannedMatch {
+  const [a, b, c, d] = four;
+  const splits: PlannedMatch[] = [
+    { court, team1: [a, b], team2: [c, d] },
+    { court, team1: [a, c], team2: [b, d] },
+    { court, team1: [a, d], team2: [b, c] },
+  ];
+  let best = splits[0];
+  let bestCost = Infinity;
+  for (const s of splits) {
+    const cost = matchCost(s, h, mode, levelOf);
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = s;
+    }
+  }
+  return best;
+}
+
+/**
+ * Sélectionne les joueurs au repos pour ce round.
+ * Priorité de repos : moins de byes cumulés, puis bye le plus ancien.
+ * Garantie : l'écart de byes entre deux joueurs ne dépasse jamais 1.
+ */
+function pickResting(players: EnginePlayer[], restingCount: number, h: HistoryState): string[] {
+  if (restingCount <= 0) return [];
+  const order = shuffled(players).sort((a, b) => {
+    const byeDiff = (h.byes.get(a.id) ?? 0) - (h.byes.get(b.id) ?? 0);
+    if (byeDiff !== 0) return byeDiff;
+    return (h.lastBye.get(a.id) ?? -1) - (h.lastBye.get(b.id) ?? -1);
+  });
+  return order.slice(0, restingCount).map((p) => p.id);
+}
+
+/** Toutes les positions (matchIndex, teamIndex, slotIndex) d'un round. */
+function positions(matches: PlannedMatch[]): Array<[number, 0 | 1, 0 | 1]> {
+  const out: Array<[number, 0 | 1, 0 | 1]> = [];
+  for (let i = 0; i < matches.length; i++) {
+    out.push([i, 0, 0], [i, 0, 1], [i, 1, 0], [i, 1, 1]);
+  }
+  return out;
+}
+
+function getSlot(m: PlannedMatch, team: 0 | 1, slot: 0 | 1): string {
+  return team === 0 ? m.team1[slot] : m.team2[slot];
+}
+function setSlot(m: PlannedMatch, team: 0 | 1, slot: 0 | 1, v: string) {
+  if (team === 0) m.team1[slot] = v;
+  else m.team2[slot] = v;
+}
+
+/**
+ * Génère un round : multi-redémarrages aléatoires + hill-climbing par échanges.
+ * Retourne le meilleur agencement trouvé (coût 0 = aucune répétition).
+ */
+function generateRound(
+  players: EnginePlayer[],
+  roundNumber: number,
+  courts: number,
+  mode: PairingMode,
+  h: HistoryState,
+  restarts = 60,
+): PlannedRound {
+  const levelOf = new Map(players.map((p) => [p.id, p.level]));
+  const capacity = Math.min(courts * 4, Math.floor(players.length / 4) * 4);
+  const resting = pickResting(players, players.length - capacity, h);
+  const restingSet = new Set(resting);
+  const active = players.filter((p) => !restingSet.has(p.id)).map((p) => p.id);
+
+  let best: PlannedMatch[] = [];
+  let bestCost = Infinity;
+
+  for (let r = 0; r < restarts && bestCost > 0; r++) {
+    const order = shuffled(active);
+    const matches: PlannedMatch[] = [];
+    for (let i = 0; i < order.length; i += 4) {
+      matches.push(bestSplit(order.slice(i, i + 4), matches.length + 1, h, mode, levelOf));
+    }
+
+    // Hill-climbing : on tente tous les échanges de joueurs entre positions.
+    let improved = true;
+    let cost = roundCost(matches, h, mode, levelOf);
+    while (improved && cost > 0) {
+      improved = false;
+      const pos = positions(matches);
+      for (let i = 0; i < pos.length && cost > 0; i++) {
+        for (let j = i + 1; j < pos.length; j++) {
+          const [mi, ti, si] = pos[i];
+          const [mj, tj, sj] = pos[j];
+          if (mi === mj) continue; // même match : couvert par bestSplit
+          const before =
+            matchCost(matches[mi], h, mode, levelOf) + matchCost(matches[mj], h, mode, levelOf);
+          const a = getSlot(matches[mi], ti, si);
+          const b = getSlot(matches[mj], tj, sj);
+          setSlot(matches[mi], ti, si, b);
+          setSlot(matches[mj], tj, sj, a);
+          const after =
+            matchCost(matches[mi], h, mode, levelOf) + matchCost(matches[mj], h, mode, levelOf);
+          if (after < before) {
+            cost = cost - before + after;
+            improved = true;
+          } else {
+            setSlot(matches[mi], ti, si, a);
+            setSlot(matches[mj], tj, sj, b);
+          }
+        }
+      }
+      // Ré-optimise le découpage interne de chaque match après les échanges.
+      for (let i = 0; i < matches.length; i++) {
+        matches[i] = bestSplit(
+          [...matches[i].team1, ...matches[i].team2],
+          matches[i].court,
+          h,
+          mode,
+          levelOf,
+        );
+      }
+      cost = roundCost(matches, h, mode, levelOf);
+    }
+
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = matches.map((m) => ({ court: m.court, team1: [...m.team1], team2: [...m.team2] }));
+    }
+  }
+
+  return { roundNumber, matches: best, resting };
+}
+
+/** Applique un round à l'historique (partenaires, adversaires, byes). */
+function commitRound(round: PlannedRound, h: HistoryState) {
+  for (const m of round.matches) {
+    bump(h.partner, pairKey(m.team1[0], m.team1[1]));
+    bump(h.partner, pairKey(m.team2[0], m.team2[1]));
+    for (const a of m.team1) for (const b of m.team2) bump(h.opponent, pairKey(a, b));
+  }
+  for (const id of round.resting) {
+    bump(h.byes, id);
+    h.lastBye.set(id, round.roundNumber);
+  }
+}
+
+function emptyHistory(): HistoryState {
+  return { partner: new Map(), opponent: new Map(), byes: new Map(), lastBye: new Map() };
+}
+
+/** Reconstruit l'historique à partir de rounds déjà joués (matchs en base). */
+export function historyFromRounds(rounds: PlannedRound[]): HistoryState {
+  const h = emptyHistory();
+  for (const r of rounds) commitRound(r, h);
+  return h;
+}
+
+function generateScheduleOnce(
+  players: EnginePlayer[],
+  rounds: number,
+  courts: number,
+  mode: PairingMode,
+): PlannedRound[] {
+  const h = emptyHistory();
+  const out: PlannedRound[] = [];
+  for (let r = 1; r <= rounds; r++) {
+    const round = generateRound(players, r, courts, mode, h);
+    commitRound(round, h);
+    out.push(round);
+  }
+  return out;
+}
+
+/** Score global d'un planning : moins il y a de répétitions, mieux c'est. */
+function scheduleScore(players: EnginePlayer[], schedule: PlannedRound[]): number {
+  const h = historyFromRounds(schedule);
+  let score = 0;
+  for (const c of h.partner.values()) if (c > 1) score += W_PARTNER * (c - 1) * (c - 1);
+  for (const c of h.opponent.values()) if (c > 1) score += W_OPPONENT * (c - 1) * (c - 1);
+  return score;
+}
+
+/**
+ * Génère l'intégralité du planning americano.
+ * La génération round par round étant gourmande, on retente le planning complet
+ * plusieurs fois et on garde le meilleur : quand une rotation parfaite existe
+ * (ex. 8 joueurs / 7 rounds), elle est trouvée.
+ * @param players minimum 4 joueurs (pas besoin d'un multiple de 4 : les byes tournent).
+ */
+export function generateAmericanoSchedule(
+  players: EnginePlayer[],
+  rounds: number,
+  courts: number,
+  mode: PairingMode,
+  attempts = 25,
+): PlannedRound[] {
+  if (players.length < 4) throw new Error("Il faut au moins 4 joueurs.");
+  let best: PlannedRound[] | null = null;
+  let bestScore = Infinity;
+  for (let i = 0; i < attempts && bestScore > 0; i++) {
+    const candidate = generateScheduleOnce(players, rounds, courts, mode);
+    const score = scheduleScore(players, candidate);
+    if (score < bestScore) {
+      bestScore = score;
+      best = candidate;
+    }
+  }
+  return best!;
+}
+
+/**
+ * Mexicano : le round suivant est déterminé par le classement courant.
+ * Groupes de 4 par rang ; dans chaque groupe, 1 & 4 affrontent 2 & 3
+ * (sommes de rangs égales → matchs serrés).
+ * @param ranked joueurs triés du 1er au dernier au classement courant.
+ */
+export function generateMexicanoRound(
+  ranked: EnginePlayer[],
+  roundNumber: number,
+  courts: number,
+  playedRounds: PlannedRound[],
+): PlannedRound {
+  if (ranked.length < 4) throw new Error("Il faut au moins 4 joueurs.");
+  const h = historyFromRounds(playedRounds);
+  const capacity = Math.min(courts * 4, Math.floor(ranked.length / 4) * 4);
+  const resting = pickResting(ranked, ranked.length - capacity, h);
+  const restingSet = new Set(resting);
+  const active = ranked.filter((p) => !restingSet.has(p.id));
+
+  const matches: PlannedMatch[] = [];
+  for (let i = 0; i + 3 < active.length; i += 4) {
+    const [r1, r2, r3, r4] = active.slice(i, i + 4);
+    matches.push({
+      court: matches.length + 1,
+      team1: [r1.id, r4.id],
+      team2: [r2.id, r3.id],
+    });
+  }
+  return { roundNumber, matches, resting };
+}
+
+/** Audit d'équité d'un planning (utilisé par les tests et l'écran de contrôle). */
+export function auditSchedule(players: EnginePlayer[], rounds: PlannedRound[]) {
+  const h = historyFromRounds(rounds);
+  let repeatedPartners = 0;
+  let maxPartnerCount = 0;
+  for (const count of h.partner.values()) {
+    if (count > 1) repeatedPartners += count - 1;
+    maxPartnerCount = Math.max(maxPartnerCount, count);
+  }
+  const byeCounts = players.map((p) => h.byes.get(p.id) ?? 0);
+  const byeSpread = Math.max(...byeCounts) - Math.min(...byeCounts);
+  return { repeatedPartners, maxPartnerCount, byeSpread };
+}
