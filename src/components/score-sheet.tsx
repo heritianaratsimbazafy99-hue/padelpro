@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { EventPlayer, Match, PadelEvent } from "@/lib/types";
 import { friendlyError } from "@/lib/utils";
 import { Button } from "./ui";
+import { useEscapeClose } from "./motion";
 
 /**
  * Bottom sheet de saisie de score.
@@ -36,6 +37,8 @@ export function ScoreSheet({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEscapeClose(true, onClose);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -103,7 +106,9 @@ export function ScoreSheet({
           >
             −
           </button>
-          <span className="tnum w-14 text-center text-3xl font-extrabold">{value}</span>
+          <span key={value} className="tnum w-14 text-center text-3xl font-extrabold animate-score-pop">
+            {value}
+          </span>
           <button
             type="button"
             aria-label={`Plus de points pour ${label}`}
@@ -121,10 +126,10 @@ export function ScoreSheet({
     <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Saisie du score">
       <button
         aria-label="Fermer"
-        className="absolute inset-0 bg-black/60 cursor-pointer"
+        className="absolute inset-0 bg-black/60 cursor-pointer animate-backdrop"
         onClick={onClose}
       />
-      <div className="relative bg-surface border-t border-border rounded-t-3xl p-5 pb-safe animate-fade-up max-w-2xl w-full mx-auto">
+      <div className="relative bg-surface border-t border-border rounded-t-3xl p-5 pb-safe animate-sheet-up max-w-2xl w-full mx-auto">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-extrabold">Annoncer le score</h2>
           <button

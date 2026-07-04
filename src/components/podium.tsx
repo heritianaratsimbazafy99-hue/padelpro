@@ -55,7 +55,10 @@ export function Podium({
         {podium.map((row, i) => (
           <div
             key={row.label}
-            className={`flex items-center gap-3 border rounded-(--radius-card) px-4 py-3 ${tones[i]}`}
+            className={`stagger-i flex items-center gap-3 border rounded-(--radius-card) px-4 py-3 ${tones[i]} ${
+              i === 0 ? "glow-lime" : ""
+            }`}
+            style={{ "--i": i * 3 } as React.CSSProperties}
           >
             <span
               className={`inline-flex items-center justify-center size-8 rounded-full text-sm font-extrabold ${

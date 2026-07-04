@@ -1,17 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #06080f;
-  --surface: #0c111e;
-  --surface-2: #121a2c;
+  --background: #04060b;
+  --surface: #0b101c;
+  --surface-2: #111a2c;
   --surface-3: #1a2440;
-  --border: #1e293e;
+  --border: #1c2740;
   --border-strong: #2c3a58;
   --ink: #f2f5fa;
   --ink-muted: #93a0b8;
   --ink-faint: #5c6b87;
   --lime: #c8f542;
   --lime-deep: #a8d92a;
+  --lime-soft: #e2ff7a;
   --on-lime: #0a0f04;
   --success: #34d399;
   --danger: #fb7185;
@@ -31,12 +32,14 @@
   --color-ink-faint: var(--ink-faint);
   --color-lime: var(--lime);
   --color-lime-deep: var(--lime-deep);
+  --color-lime-soft: var(--lime-soft);
   --color-on-lime: var(--on-lime);
   --color-success: var(--success);
   --color-danger: var(--danger);
   --color-warning: var(--warning);
   --color-info: var(--info);
   --font-sans: var(--font-jakarta), system-ui, sans-serif;
+  --font-display: var(--font-grotesk), var(--font-jakarta), system-ui, sans-serif;
   --radius-card: 1.25rem;
   --radius-field: 0.875rem;
 }
@@ -50,9 +53,18 @@ body {
   color: var(--ink);
   font-family: var(--font-jakarta), system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
+  overflow-x: clip;
 }
 
-/* Court-line decorative background for hero sections */
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* ---------------------------------------------------------------------------
+   Décors de fond
+--------------------------------------------------------------------------- */
+
+/* Grille "lignes de terrain" pour les sections hero */
 .court-grid {
   background-image:
     linear-gradient(to right, rgba(200, 245, 66, 0.05) 1px, transparent 1px),
@@ -60,16 +72,138 @@ body {
   background-size: 44px 44px;
 }
 
+/* Halo radial lime en haut de page */
+.glow-scene {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(200, 245, 66, 0.13), transparent 70%),
+    radial-gradient(ellipse 40% 35% at 85% 15%, rgba(96, 165, 250, 0.07), transparent 70%);
+}
+
+/* Grain subtil par-dessus les décors */
+.noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
 .glow-lime {
   box-shadow: 0 0 40px -8px rgba(200, 245, 66, 0.35);
 }
 
-/* Tabular figures for scores and timers */
+/* Bordure dégradée (cartes premium) */
+.gradient-border {
+  position: relative;
+  background: var(--surface);
+  background-clip: padding-box;
+  border: 1px solid transparent;
+}
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  margin: -1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    160deg,
+    rgba(200, 245, 66, 0.5),
+    rgba(200, 245, 66, 0.08) 30%,
+    rgba(96, 165, 250, 0.12) 70%,
+    rgba(200, 245, 66, 0.25)
+  );
+}
+
+/* Texte dégradé lime → blanc */
+.text-gradient {
+  background: linear-gradient(120deg, var(--lime-soft) 0%, var(--lime) 45%, #8fca1d 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------------------------------------------------------------------------
+   Micro-interactions
+--------------------------------------------------------------------------- */
+
+/* Carte interactive : lift + glow au survol */
+.card-lift {
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+@media (hover: hover) {
+  .card-lift:hover {
+    transform: translateY(-3px);
+    border-color: rgba(200, 245, 66, 0.35);
+    box-shadow:
+      0 12px 32px -12px rgba(0, 0, 0, 0.6),
+      0 0 24px -10px rgba(200, 245, 66, 0.25);
+  }
+}
+.card-lift:active {
+  transform: translateY(0) scale(0.985);
+}
+
+/* Balayage lumineux sur les CTA principaux */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+}
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 65%
+  );
+  transform: translateX(-120%);
+  transition: transform 0s;
+  pointer-events: none;
+}
+@media (hover: hover) {
+  .btn-shine:hover::after {
+    transform: translateX(120%);
+    transition: transform 0.7s ease;
+  }
+}
+
+/* Spotlight qui suit le curseur (bento cards, position pilotée en JS) */
+.spotlight {
+  position: relative;
+  overflow: hidden;
+}
+.spotlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: radial-gradient(
+    280px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    rgba(200, 245, 66, 0.09),
+    transparent 65%
+  );
+  pointer-events: none;
+}
+@media (hover: hover) {
+  .spotlight:hover::before {
+    opacity: 1;
+  }
+}
+
+/* Tabular figures pour scores et chronos */
 .tnum {
   font-variant-numeric: tabular-nums;
 }
 
-/* Safe-area support for fixed bottom bars */
+/* Safe-area pour les barres fixes en bas */
 .pb-safe {
   padding-bottom: max(env(safe-area-inset-bottom), 0.75rem);
 }
@@ -77,7 +211,7 @@ body {
 input,
 select,
 textarea {
-  font-size: 16px; /* prevents iOS auto-zoom on focus */
+  font-size: 16px; /* évite le zoom auto iOS au focus */
 }
 
 button,
@@ -86,10 +220,14 @@ a,
   touch-action: manipulation;
 }
 
+/* ---------------------------------------------------------------------------
+   Animations
+--------------------------------------------------------------------------- */
+
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(14px);
   }
   to {
     opacity: 1;
@@ -98,7 +236,22 @@ a,
 }
 
 .animate-fade-up {
-  animation: fade-up 0.35s ease-out both;
+  animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes pulse-soft {
@@ -115,6 +268,198 @@ a,
   animation: pulse-soft 1.8s ease-in-out infinite;
 }
 
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 5s ease-in-out infinite;
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 28s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Squelettes de chargement */
+.skeleton {
+  border-radius: 0.625rem;
+  background: linear-gradient(
+    100deg,
+    var(--surface-2) 40%,
+    var(--surface-3) 50%,
+    var(--surface-2) 60%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+/* Rebond de balle (loader) */
+@keyframes ball-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scaleX(1) scaleY(1);
+  }
+  15% {
+    transform: translateY(0) scaleX(1.15) scaleY(0.8);
+  }
+  50% {
+    transform: translateY(-1.4rem) scaleX(0.95) scaleY(1.05);
+  }
+}
+
+.animate-ball-bounce {
+  animation: ball-bounce 0.9s cubic-bezier(0.34, 0.2, 0.64, 1) infinite;
+  transform-origin: bottom center;
+}
+
+@keyframes shadow-squash {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scaleX(0.55);
+    opacity: 0.2;
+  }
+}
+
+.animate-shadow-squash {
+  animation: shadow-squash 0.9s cubic-bezier(0.34, 0.2, 0.64, 1) infinite;
+}
+
+/* Bottom sheet : glisse depuis le bas */
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-sheet-up {
+  animation: sheet-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Fond de modale en fondu */
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-backdrop {
+  animation: backdrop-in 0.25s ease-out both;
+}
+
+/* Pop du score quand la valeur change */
+@keyframes score-pop {
+  0% {
+    transform: scale(1.35);
+    color: var(--lime);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-score-pop {
+  animation: score-pop 0.25s ease-out both;
+}
+
+/* Transition entre pages (template.tsx) */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-page-in {
+  animation: page-in 0.3s ease-out both;
+}
+
+/* Reveal au scroll (IntersectionObserver → .is-inview) */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal.is-inview {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Cascade : chaque enfant direct hérite d'un délai croissant */
+.stagger > * {
+  --reveal-delay: 0ms;
+}
+.stagger > *:nth-child(2) {
+  --reveal-delay: 60ms;
+}
+.stagger > *:nth-child(3) {
+  --reveal-delay: 120ms;
+}
+.stagger > *:nth-child(4) {
+  --reveal-delay: 180ms;
+}
+.stagger > *:nth-child(5) {
+  --reveal-delay: 240ms;
+}
+.stagger > *:nth-child(6) {
+  --reveal-delay: 300ms;
+}
+.stagger > *:nth-child(7) {
+  --reveal-delay: 360ms;
+}
+.stagger > *:nth-child(8) {
+  --reveal-delay: 420ms;
+}
+.stagger > *:nth-child(n + 9) {
+  --reveal-delay: 480ms;
+}
+
+/* Cascade légère pilotée par --i (listes dynamiques) */
+.stagger-i {
+  animation: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -126,8 +471,31 @@ a,
   html {
     scroll-behavior: auto;
   }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 ::selection {
   background: rgba(200, 245, 66, 0.3);
+}
+
+/* Scrollbar discrète (desktop) */
+@media (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--background);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--surface-3);
+    border-radius: 8px;
+    border: 2px solid var(--background);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--border-strong);
+  }
 }

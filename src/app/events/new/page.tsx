@@ -124,12 +124,13 @@ export default function NewEventPage() {
         {/* Indicateur d'étape */}
         <div className="flex gap-1.5 mb-6" aria-label={`Étape ${step} sur 3`}>
           {[1, 2, 3].map((s) => (
-            <div
-              key={s}
-              className={`h-1.5 flex-1 rounded-full transition-colors ${
-                s <= step ? "bg-lime" : "bg-surface-3"
-              }`}
-            />
+            <div key={s} className="h-1.5 flex-1 rounded-full bg-surface-3 overflow-hidden">
+              <div
+                className={`h-full rounded-full bg-lime transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                  s <= step ? "w-full" : "w-0"
+                }`}
+              />
+            </div>
           ))}
         </div>
 

@@ -50,27 +50,42 @@ const navItems = [
 /** Fixed bottom navigation for the authenticated app (mobile-first). */
 export function BottomNav() {
   const pathname = usePathname();
+  const activeIndex = navItems.findIndex(({ href }) =>
+    href === "/events"
+      ? pathname === "/events" || (pathname.startsWith("/events/") && pathname !== "/events/new")
+      : pathname === href || (href !== "/dashboard" && pathname.startsWith(href + "/")),
+  );
   return (
     <nav
       aria-label="Navigation principale"
       className="fixed bottom-0 inset-x-0 z-40 bg-background/90 backdrop-blur-lg border-t border-border pb-safe"
     >
-      <div className="mx-auto max-w-2xl grid grid-cols-5">
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const active =
-            href === "/events"
-              ? pathname === "/events" || (pathname.startsWith("/events/") && pathname !== "/events/new")
-              : pathname === href || (href !== "/dashboard" && pathname.startsWith(href + "/"));
+      <div className="mx-auto max-w-2xl grid grid-cols-5 relative">
+        {/* Indicateur actif : pilule qui glisse d'un onglet à l'autre */}
+        {activeIndex >= 0 && (
+          <span
+            aria-hidden
+            className="absolute top-1.5 h-8 w-[20%] flex justify-center transition-[left] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] pointer-events-none"
+            style={{ left: `${activeIndex * 20}%` }}
+          >
+            <span className="h-8 w-14 rounded-full bg-lime/12 border border-lime/20" />
+          </span>
+        )}
+        {navItems.map(({ href, label, icon: Icon }, i) => {
+          const active = i === activeIndex;
           return (
             <Link
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
-              className={`flex flex-col items-center gap-1 pt-2.5 pb-1.5 text-[0.6875rem] font-semibold transition-colors ${
-                active ? "text-lime" : "text-ink-faint hover:text-ink-muted"
+              className={`relative flex flex-col items-center gap-1 pt-2.5 pb-1.5 text-[0.6875rem] font-semibold transition-colors ${
+                active ? "text-lime" : "text-ink-faint hover:text-ink-muted active:scale-95"
               }`}
             >
-              <Icon className="size-5" aria-hidden />
+              <Icon
+                className={`size-5 transition-transform duration-300 ${active ? "-translate-y-px scale-110" : ""}`}
+                aria-hidden
+              />
               {label}
             </Link>
           );

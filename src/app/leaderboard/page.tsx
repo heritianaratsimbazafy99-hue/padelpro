@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Crown, Medal } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
-import { Avatar, EmptyState, PageLoader } from "@/components/ui";
+import { Avatar, EmptyState, Skeleton, SkeletonList } from "@/components/ui";
 
 interface LeaderRow {
   p_id: string;
@@ -51,7 +51,10 @@ export default function LeaderboardPage() {
           pour grimper plus vite.
         </p>
         {rows === null ? (
-          <PageLoader />
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-10 w-full rounded-(--radius-card)" />
+            <SkeletonList rows={6} height="h-14" />
+          </div>
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<Medal className="size-6" />}
@@ -73,9 +76,10 @@ export default function LeaderboardPage() {
                 return (
                   <li
                     key={row.p_id}
-                    className={`grid grid-cols-[2.5rem_1fr_3rem_3rem_3.5rem] items-center gap-2 px-4 py-3 border-b border-border last:border-b-0 ${
+                    className={`stagger-i grid grid-cols-[2.5rem_1fr_3rem_3rem_3.5rem] items-center gap-2 px-4 py-3 border-b border-border last:border-b-0 transition-colors hover:bg-surface-2/60 ${
                       me ? "bg-lime/5" : ""
                     }`}
+                    style={{ "--i": Math.min(i, 12) } as React.CSSProperties}
                   >
                     <span
                       className={`inline-flex items-center justify-center size-7 rounded-full border text-xs font-extrabold ${

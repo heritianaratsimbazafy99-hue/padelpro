@@ -10,7 +10,8 @@ import { usePlayerStats } from "@/lib/use-stats";
 import { FORMAT_LABELS, STATUS_LABELS } from "@/lib/utils";
 import type { PadelEvent } from "@/lib/types";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
-import { Badge, Button, Input, PageLoader } from "@/components/ui";
+import { Badge, Button, Input, SkeletonList } from "@/components/ui";
+import { CountUp } from "@/components/motion";
 
 export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -62,10 +63,10 @@ export default function DashboardPage() {
         </section>
 
         {/* Actions rapides */}
-        <section className="grid grid-cols-2 gap-3 mb-6">
+        <section className="grid grid-cols-2 gap-3 mb-6 animate-fade-up [animation-delay:60ms]">
           <Link
             href="/events/new"
-            className="flex flex-col gap-3 bg-lime text-on-lime rounded-(--radius-card) p-4 cursor-pointer transition-all duration-150 hover:bg-lime-deep active:scale-[0.98] glow-lime"
+            className="btn-shine flex flex-col gap-3 bg-lime text-on-lime rounded-(--radius-card) p-4 cursor-pointer transition-all duration-200 hover:bg-lime-deep hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] glow-lime"
           >
             <Plus className="size-6" aria-hidden />
             <span className="font-extrabold leading-tight">
@@ -89,6 +90,9 @@ export default function DashboardPage() {
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                 placeholder="CODE"
                 maxLength={6}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
                 className="h-10 px-3 text-sm tracking-widest font-bold uppercase"
               />
               <Button type="submit" size="sm" aria-label="Rejoindre" className="h-10 shrink-0 px-3">
@@ -99,22 +103,24 @@ export default function DashboardPage() {
         </section>
 
         {/* Stats perso */}
-        <section className="mb-6">
+        <section className="mb-6 animate-fade-up [animation-delay:120ms]">
           <h2 className="text-sm font-extrabold uppercase tracking-wider text-ink-faint mb-3">
             Tes statistiques
           </h2>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { icon: Trophy, label: "Victoires", value: stats?.wins ?? "–" },
-              { icon: Target, label: "Matchs", value: stats?.matches ?? "–" },
-              { icon: Flame, label: "% victoire", value: stats ? `${stats.winRate}%` : "–" },
-            ].map(({ icon: Icon, label, value }) => (
+              { icon: Trophy, label: "Victoires", value: stats?.wins, suffix: "" },
+              { icon: Target, label: "Matchs", value: stats?.matches, suffix: "" },
+              { icon: Flame, label: "% victoire", value: stats?.winRate, suffix: "%" },
+            ].map(({ icon: Icon, label, value, suffix }) => (
               <div
                 key={label}
-                className="bg-surface border border-border rounded-(--radius-card) p-3.5 flex flex-col gap-1.5"
+                className="bg-surface border border-border rounded-(--radius-card) p-3.5 flex flex-col gap-1.5 card-lift"
               >
                 <Icon className="size-4 text-lime" aria-hidden />
-                <p className="tnum text-xl font-extrabold">{value}</p>
+                <p className="tnum text-xl font-extrabold">
+                  {value === undefined ? "–" : <CountUp value={value} suffix={suffix} />}
+                </p>
                 <p className="text-[0.6875rem] text-ink-faint font-semibold">{label}</p>
               </div>
             ))}
@@ -122,7 +128,7 @@ export default function DashboardPage() {
         </section>
 
         {/* Événements */}
-        <section>
+        <section className="animate-fade-up [animation-delay:180ms]">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-extrabold uppercase tracking-wider text-ink-faint">
               {active.length > 0 ? "En cours" : "Récents"}
@@ -132,7 +138,7 @@ export default function DashboardPage() {
             </Link>
           </div>
           {recent === null ? (
-            <PageLoader label="" />
+            <SkeletonList rows={3} />
           ) : recent.length === 0 ? (
             <div className="bg-surface border border-dashed border-border-strong rounded-(--radius-card) p-6 text-center">
               <p className="text-sm text-ink-muted leading-relaxed">
@@ -143,11 +149,11 @@ export default function DashboardPage() {
             </div>
           ) : (
             <ul className="flex flex-col gap-3">
-              {(active.length > 0 ? active : recent).map((e) => (
-                <li key={e.id}>
+              {(active.length > 0 ? active : recent).map((e, i) => (
+                <li key={e.id} className="stagger-i" style={{ "--i": i } as React.CSSProperties}>
                   <Link
                     href={`/events/${e.id}`}
-                    className="flex items-center gap-3 bg-surface border border-border rounded-(--radius-card) p-4 transition-all duration-150 hover:border-border-strong active:scale-[0.99]"
+                    className="group flex items-center gap-3 bg-surface border border-border rounded-(--radius-card) p-4 card-lift"
                   >
                     <div className="flex-1 min-w-0">
                       <p className="font-bold truncate">{e.name}</p>
@@ -162,11 +168,17 @@ export default function DashboardPage() {
                                 : "muted"
                           }
                         >
+                          {e.status === "active" && (
+                            <span className="size-1.5 rounded-full bg-warning animate-pulse-soft" aria-hidden />
+                          )}
                           {STATUS_LABELS[e.status]}
                         </Badge>
                       </div>
                     </div>
-                    <ChevronRight className="size-5 text-ink-faint shrink-0" aria-hidden />
+                    <ChevronRight
+                      className="size-5 text-ink-faint shrink-0 transition-transform group-hover:translate-x-1 group-hover:text-lime"
+                      aria-hidden
+                    />
                   </Link>
                 </li>
               ))}
