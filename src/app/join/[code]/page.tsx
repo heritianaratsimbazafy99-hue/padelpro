@@ -135,7 +135,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
             Ton nom n&apos;est pas dans la liste ? Demande à l&apos;organisateur de t&apos;ajouter.
           </p>
           <p className="text-sm text-center mt-3">
-            <Link href="/signup" className="text-lime font-semibold hover:underline">
+            <Link href="/signup" className="text-court font-semibold hover:underline">
               Crée un compte
             </Link>{" "}
             <span className="text-ink-faint">pour suivre tes statistiques.</span>
@@ -197,7 +197,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
             {/* Mon prochain match */}
             {myNextMatch ? (
               <section className="mb-6 animate-fade-up">
-                <h2 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider text-lime mb-2.5">
+                <h2 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider text-court mb-2.5">
                   <span className="size-2 rounded-full bg-lime animate-pulse-soft" aria-hidden />
                   Ton prochain match
                 </h2>
@@ -214,7 +214,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
               </section>
             ) : (
               <section className="mb-6 flex items-center gap-3 bg-surface-2 border border-border rounded-(--radius-card) px-4 py-3.5">
-                <PartyPopper className="size-5 text-lime shrink-0" aria-hidden />
+                <PartyPopper className="size-5 text-court shrink-0" aria-hidden />
                 <p className="text-sm text-ink-muted">
                   Pas de match en attente pour toi — repos ou tous tes matchs sont joués.
                 </p>
@@ -277,7 +277,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
         <footer className="mt-10 pb-8 text-center">
           <p className="text-xs text-ink-faint">
             Propulsé par PadelPro ·{" "}
-            <Link href="/signup" className="text-lime hover:underline">
+            <Link href="/signup" className="text-court hover:underline">
               Crée tes propres tournois
             </Link>
           </p>

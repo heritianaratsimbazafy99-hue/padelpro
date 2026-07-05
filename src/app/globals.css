@@ -1,24 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  --background: #04060b;
-  --surface: #0b101c;
-  --surface-2: #111a2c;
-  --surface-3: #1a2440;
-  --border: #1c2740;
-  --border-strong: #2c3a58;
-  --ink: #f2f5fa;
-  --ink-muted: #93a0b8;
-  --ink-faint: #5c6b87;
+  /* Palette « Club Éditorial » : papier crème, vert court, lime, terracotta.
+     Partagée par la landing et toute l'app authentifiée. */
+  --background: #f3f0e6;
+  --surface: #fbf9f2;
+  --surface-2: #eae6d7;
+  --surface-3: #dfdac6;
+  --border: #ddd7c2;
+  --border-strong: #bfb89b;
+  --ink: #14210f;
+  --ink-muted: #5c664e;
+  --ink-faint: #94927a;
   --lime: #c8f542;
-  --lime-deep: #a8d92a;
+  --lime-deep: #b3e42e;
   --lime-soft: #e2ff7a;
-  --on-lime: #0a0f04;
-  --success: #34d399;
-  --danger: #fb7185;
-  --warning: #fbbf24;
-  --info: #60a5fa;
-  /* Palette éditoriale landing (thème clair « Club ») */
+  --on-lime: #17230a;
+  --success: #1d9e6a;
+  --danger: #d43d51;
+  --warning: #b57708;
+  --info: #2f6fd0;
+  /* Accents éditoriaux */
   --cream: #f3f0e6;
   --court: #14351f;
   --court-2: #1c4a2b;
@@ -49,8 +51,8 @@
   --color-clay: var(--clay);
   --font-sans: var(--font-jakarta), system-ui, sans-serif;
   --font-display: var(--font-grotesk), var(--font-jakarta), system-ui, sans-serif;
-  --radius-card: 1.25rem;
-  --radius-field: 0.875rem;
+  --radius-card: 1.5rem;
+  --radius-field: 1rem;
 }
 
 html {
@@ -69,6 +71,13 @@ body {
   font-family: var(--font-display);
 }
 
+/* Titres de l'app en Space Grotesk, comme la landing */
+h1,
+h2 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
 /* ---------------------------------------------------------------------------
    Décors de fond
 --------------------------------------------------------------------------- */
@@ -76,16 +85,16 @@ body {
 /* Grille "lignes de terrain" pour les sections hero */
 .court-grid {
   background-image:
-    linear-gradient(to right, rgba(200, 245, 66, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(200, 245, 66, 0.05) 1px, transparent 1px);
-  background-size: 44px 44px;
+    linear-gradient(to right, rgba(20, 53, 31, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(20, 53, 31, 0.055) 1px, transparent 1px);
+  background-size: 56px 56px;
 }
 
 /* Halo radial lime en haut de page */
 .glow-scene {
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(200, 245, 66, 0.13), transparent 70%),
-    radial-gradient(ellipse 40% 35% at 85% 15%, rgba(96, 165, 250, 0.07), transparent 70%);
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(200, 245, 66, 0.35), transparent 65%),
+    radial-gradient(ellipse 40% 35% at 85% 15%, rgba(232, 88, 47, 0.1), transparent 70%);
 }
 
 /* Grain subtil par-dessus les décors */
@@ -95,7 +104,7 @@ body {
   inset: 0;
   pointer-events: none;
   opacity: 0.35;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 .glow-lime {
@@ -118,16 +127,16 @@ body {
   border-radius: inherit;
   background: linear-gradient(
     160deg,
-    rgba(200, 245, 66, 0.5),
-    rgba(200, 245, 66, 0.08) 30%,
-    rgba(96, 165, 250, 0.12) 70%,
-    rgba(200, 245, 66, 0.25)
+    rgba(179, 228, 46, 0.9),
+    rgba(20, 53, 31, 0.12) 30%,
+    rgba(232, 88, 47, 0.25) 70%,
+    rgba(179, 228, 46, 0.5)
   );
 }
 
 /* Texte dégradé lime → blanc */
 .text-gradient {
-  background: linear-gradient(120deg, var(--lime-soft) 0%, var(--lime) 45%, #8fca1d 100%);
+  background: linear-gradient(120deg, var(--court-2) 0%, #4f7a1d 55%, #7aa511 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -147,10 +156,10 @@ body {
 @media (hover: hover) {
   .card-lift:hover {
     transform: translateY(-3px);
-    border-color: rgba(200, 245, 66, 0.35);
+    border-color: rgba(20, 53, 31, 0.3);
     box-shadow:
-      0 12px 32px -12px rgba(0, 0, 0, 0.6),
-      0 0 24px -10px rgba(200, 245, 66, 0.25);
+      0 2px 4px rgba(20, 33, 15, 0.05),
+      0 24px 48px -16px rgba(20, 33, 15, 0.25);
   }
 }
 .card-lift:active {
@@ -498,18 +507,7 @@ a,
 =========================================================================== */
 
 .landing-light {
-  --background: #f3f0e6;
-  --surface: #fbf9f2;
-  --surface-2: #eae6d7;
-  --surface-3: #dfdac6;
-  --border: #ddd7c2;
-  --border-strong: #bfb89b;
-  --ink: #14210f;
-  --ink-muted: #5c664e;
-  --ink-faint: #94927a;
-  --lime: #c8f542;
-  --lime-deep: #b3e42e;
-  --on-lime: #17230a;
+  /* Alias historique : la palette claire est désormais globale (:root). */
   background: var(--background);
   color: var(--ink);
 }

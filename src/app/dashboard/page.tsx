@@ -80,7 +80,7 @@ export default function DashboardPage() {
             className="flex flex-col justify-between gap-2 bg-surface border border-border rounded-(--radius-card) p-4"
           >
             <label htmlFor="join-code" className="flex items-center gap-2 font-extrabold text-sm">
-              <QrCode className="size-5 text-lime" aria-hidden />
+              <QrCode className="size-5 text-court" aria-hidden />
               Rejoindre
             </label>
             <div className="flex gap-1.5">
@@ -104,7 +104,7 @@ export default function DashboardPage() {
 
         {/* Stats perso */}
         <section className="mb-6 animate-fade-up [animation-delay:120ms]">
-          <h2 className="text-sm font-extrabold uppercase tracking-wider text-ink-faint mb-3">
+          <h2 className="text-sm font-extrabold uppercase tracking-wider text-clay mb-3">
             Tes statistiques
           </h2>
           <div className="grid grid-cols-3 gap-3">
@@ -117,7 +117,7 @@ export default function DashboardPage() {
                 key={label}
                 className="bg-surface border border-border rounded-(--radius-card) p-3.5 flex flex-col gap-1.5 card-lift"
               >
-                <Icon className="size-4 text-lime" aria-hidden />
+                <Icon className="size-4 text-court" aria-hidden />
                 <p className="tnum text-xl font-extrabold">
                   {value === undefined ? "–" : <CountUp value={value} suffix={suffix} />}
                 </p>
@@ -130,10 +130,10 @@ export default function DashboardPage() {
         {/* Événements */}
         <section className="animate-fade-up [animation-delay:180ms]">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-extrabold uppercase tracking-wider text-ink-faint">
+            <h2 className="text-sm font-extrabold uppercase tracking-wider text-clay">
               {active.length > 0 ? "En cours" : "Récents"}
             </h2>
-            <Link href="/events" className="text-sm font-semibold text-lime hover:underline">
+            <Link href="/events" className="text-sm font-semibold text-court hover:underline">
               Tout voir
             </Link>
           </div>
@@ -176,7 +176,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <ChevronRight
-                      className="size-5 text-ink-faint shrink-0 transition-transform group-hover:translate-x-1 group-hover:text-lime"
+                      className="size-5 text-ink-faint shrink-0 transition-transform group-hover:translate-x-1 group-hover:text-court"
                       aria-hidden
                     />
                   </Link>

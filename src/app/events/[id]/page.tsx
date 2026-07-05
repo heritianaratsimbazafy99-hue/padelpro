@@ -136,7 +136,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
           <button
             onClick={() => setShowQR(true)}
             aria-label="Partager par QR code"
-            className="size-10 rounded-xl flex items-center justify-center text-lime bg-lime/10 border border-lime/25 hover:bg-lime/20 cursor-pointer transition-colors"
+            className="size-10 rounded-xl flex items-center justify-center text-court bg-lime/10 border border-lime/25 hover:bg-lime/20 cursor-pointer transition-colors"
           >
             <QrCode className="size-5" />
           </button>
@@ -386,7 +386,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
       {/* Confirmation destructive */}
       {confirmAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-5" role="dialog" aria-modal="true">
-          <button aria-label="Annuler" className="absolute inset-0 bg-black/70 cursor-pointer animate-backdrop" onClick={() => setConfirmAction(null)} />
+          <button aria-label="Annuler" className="absolute inset-0 bg-court/60 backdrop-blur-sm cursor-pointer animate-backdrop" onClick={() => setConfirmAction(null)} />
           <div className="relative bg-surface border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-in">
             <h2 className="text-lg font-extrabold mb-2">
               {confirmAction === "delete" ? "Supprimer l'événement ?" : "Terminer l'événement ?"}

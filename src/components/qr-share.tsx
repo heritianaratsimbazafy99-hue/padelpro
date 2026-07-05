@@ -38,7 +38,7 @@ export function QRShare({ shareCode, onClose }: { shareCode: string; onClose: ()
       aria-modal="true"
       aria-label="Partager l'événement"
     >
-      <button aria-label="Fermer" className="absolute inset-0 bg-black/70 cursor-pointer animate-backdrop" onClick={onClose} />
+      <button aria-label="Fermer" className="absolute inset-0 bg-court/60 backdrop-blur-sm cursor-pointer animate-backdrop" onClick={onClose} />
       <div className="relative bg-surface border border-border rounded-3xl p-6 w-full max-w-sm text-center animate-scale-in">
         <button
           onClick={onClose}
@@ -55,7 +55,7 @@ export function QRShare({ shareCode, onClose }: { shareCode: string; onClose: ()
         <div className="inline-block bg-white p-4 rounded-2xl mb-4 glow-lime">
           <QRCodeSVG value={url} size={200} marginSize={0} aria-label={`QR code vers ${url}`} />
         </div>
-        <p className="tnum text-2xl font-extrabold tracking-[0.3em] text-lime mb-5">{shareCode}</p>
+        <p className="tnum text-2xl font-extrabold tracking-[0.3em] text-court mb-5">{shareCode}</p>
         <div className="flex gap-2">
           <Button variant="secondary" full onClick={copy}>
             {copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}

@@ -25,13 +25,13 @@ function TeamLine({
       <p
         className={`flex-1 truncate text-sm ${
           won ? "font-bold text-ink" : "font-medium text-ink-muted"
-        } ${highlight ? "text-lime" : ""}`}
+        } ${highlight ? "text-court" : ""}`}
       >
         {names.join(" & ") || "À déterminer"}
       </p>
       <span
         className={`tnum text-lg shrink-0 ${
-          won ? "font-extrabold text-lime" : "font-bold text-ink-muted"
+          won ? "font-extrabold text-court" : "font-bold text-ink-muted"
         }`}
       >
         {score ?? "–"}

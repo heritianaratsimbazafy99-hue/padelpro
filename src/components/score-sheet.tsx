@@ -113,7 +113,7 @@ export function ScoreSheet({
             type="button"
             aria-label={`Plus de points pour ${label}`}
             onClick={() => onChange(value + 1)}
-            className="size-12 rounded-xl bg-lime/10 border border-lime/30 text-lime text-xl font-bold cursor-pointer transition-colors hover:bg-lime/20 active:scale-95"
+            className="size-12 rounded-xl bg-lime/10 border border-lime/30 text-court text-xl font-bold cursor-pointer transition-colors hover:bg-lime/20 active:scale-95"
           >
             +
           </button>
@@ -126,7 +126,7 @@ export function ScoreSheet({
     <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Saisie du score">
       <button
         aria-label="Fermer"
-        className="absolute inset-0 bg-black/60 cursor-pointer animate-backdrop"
+        className="absolute inset-0 bg-court/55 backdrop-blur-sm cursor-pointer animate-backdrop"
         onClick={onClose}
       />
       <div className="relative bg-surface border-t border-border rounded-t-3xl p-5 pb-safe animate-sheet-up max-w-2xl w-full mx-auto">

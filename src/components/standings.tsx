@@ -6,9 +6,9 @@ import { computeStandings } from "@/lib/engine/standings";
 import { Avatar } from "./ui";
 
 const medalTones = [
-  "bg-lime/15 text-lime border-lime/30",
-  "bg-slate-300/15 text-slate-300 border-slate-300/30",
-  "bg-amber-600/15 text-amber-500 border-amber-600/30",
+  "bg-lime/15 text-court border-lime/30",
+  "bg-surface-3 text-ink-muted border-border-strong",
+  "bg-amber-600/15 text-amber-700 border-amber-600/30",
 ];
 
 /** Classement live americano/mexicano : points cumulés, victoires, diff. */
@@ -64,7 +64,7 @@ export function Standings({
               </span>
               <span className="flex items-center gap-2 min-w-0">
                 <Avatar name={row.name} size="sm" />
-                <span className={`truncate text-sm ${me ? "font-bold text-lime" : "font-semibold"}`}>
+                <span className={`truncate text-sm ${me ? "font-bold text-court" : "font-semibold"}`}>
                   {row.name}
                   {me && <span className="text-ink-faint font-medium"> (toi)</span>}
                 </span>

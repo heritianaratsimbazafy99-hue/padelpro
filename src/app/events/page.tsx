@@ -98,7 +98,7 @@ export default function EventsPage() {
                     <p className="text-xs text-ink-faint mt-1.5">{formatDate(e.created_at)}</p>
                   </div>
                   <ChevronRight
-                    className="size-5 text-ink-faint shrink-0 transition-transform group-hover:translate-x-1 group-hover:text-lime"
+                    className="size-5 text-ink-faint shrink-0 transition-transform group-hover:translate-x-1 group-hover:text-court"
                     aria-hidden
                   />
                 </Link>

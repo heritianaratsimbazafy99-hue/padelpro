@@ -41,14 +41,14 @@ export function Podium({
 
   const tones = [
     "border-lime/50 bg-lime/10",
-    "border-slate-300/40 bg-slate-300/5",
+    "border-border-strong bg-surface-2/60",
     "border-amber-600/40 bg-amber-600/5",
   ];
 
   return (
     <section className="mb-6 animate-fade-up">
       <div className="flex items-center gap-2 mb-3">
-        <Trophy className="size-5 text-lime" aria-hidden />
+        <Trophy className="size-5 text-court" aria-hidden />
         <h2 className="text-lg font-extrabold">Podium</h2>
       </div>
       <div className="flex flex-col gap-2">
@@ -62,7 +62,7 @@ export function Podium({
           >
             <span
               className={`inline-flex items-center justify-center size-8 rounded-full text-sm font-extrabold ${
-                i === 0 ? "bg-lime text-on-lime" : i === 1 ? "bg-slate-300/20 text-slate-200" : "bg-amber-600/20 text-amber-500"
+                i === 0 ? "bg-lime text-on-lime" : i === 1 ? "bg-surface-3 text-ink-muted" : "bg-amber-600/20 text-amber-700"
               }`}
             >
               {i + 1}

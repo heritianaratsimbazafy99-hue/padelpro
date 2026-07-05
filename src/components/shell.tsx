@@ -68,7 +68,7 @@ export function BottomNav() {
             className="absolute top-1.5 h-8 w-[20%] flex justify-center transition-[left] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] pointer-events-none"
             style={{ left: `${activeIndex * 20}%` }}
           >
-            <span className="h-8 w-14 rounded-full bg-lime/12 border border-lime/20" />
+            <span className="h-8 w-14 rounded-full bg-lime shadow-club" />
           </span>
         )}
         {navItems.map(({ href, label, icon: Icon }, i) => {
@@ -79,7 +79,7 @@ export function BottomNav() {
               href={href}
               aria-current={active ? "page" : undefined}
               className={`relative flex flex-col items-center gap-1 pt-2.5 pb-1.5 text-[0.6875rem] font-semibold transition-colors ${
-                active ? "text-lime" : "text-ink-faint hover:text-ink-muted active:scale-95"
+                active ? "text-court" : "text-ink-faint hover:text-ink-muted active:scale-95"
               }`}
             >
               <Icon

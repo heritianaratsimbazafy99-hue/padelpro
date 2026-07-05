@@ -14,21 +14,21 @@ type ButtonSize = "sm" | "md" | "lg";
 
 const buttonVariants: Record<ButtonVariant, string> = {
   primary:
-    "btn-shine bg-lime text-on-lime font-bold hover:bg-lime-deep hover:shadow-[0_0_28px_-6px_rgba(200,245,66,0.5)] hover:-translate-y-px active:translate-y-0 active:scale-[0.98] disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-none",
+    "btn-shine bg-court text-cream font-bold hover:bg-court-2 hover:shadow-club-lg hover:-translate-y-px active:translate-y-0 active:scale-[0.98] disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-none",
   secondary:
-    "bg-surface-3 text-ink font-semibold hover:bg-border-strong hover:-translate-y-px active:translate-y-0 active:scale-[0.98] disabled:opacity-40",
+    "bg-surface-2 text-ink font-semibold border border-border hover:border-border-strong hover:-translate-y-px active:translate-y-0 active:scale-[0.98] disabled:opacity-40",
   ghost:
     "bg-transparent text-ink-muted font-semibold hover:text-ink hover:bg-surface-2 active:scale-[0.98] disabled:opacity-40",
   danger:
     "bg-danger/10 text-danger font-semibold border border-danger/30 hover:bg-danger/20 active:scale-[0.98] disabled:opacity-40",
   outline:
-    "bg-transparent text-ink font-semibold border border-border-strong hover:border-lime hover:text-lime hover:-translate-y-px active:translate-y-0 active:scale-[0.98] disabled:opacity-40",
+    "bg-surface text-ink font-semibold border border-border-strong hover:border-court hover:text-court hover:-translate-y-px active:translate-y-0 active:scale-[0.98] disabled:opacity-40",
 };
 
 const buttonSizes: Record<ButtonSize, string> = {
-  sm: "h-9 px-3.5 text-sm rounded-xl gap-1.5",
-  md: "h-11 px-5 text-[0.9375rem] rounded-xl gap-2",
-  lg: "h-13 px-6 text-base rounded-2xl gap-2 min-h-[3.25rem]",
+  sm: "h-9 px-4 text-sm rounded-full gap-1.5",
+  md: "h-11 px-6 text-[0.9375rem] rounded-full gap-2",
+  lg: "h-13 px-7 text-base rounded-full gap-2 min-h-[3.25rem]",
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -45,7 +45,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       disabled={disabled || loading}
       className={cx(
         "inline-flex items-center justify-center cursor-pointer select-none transition-all duration-200",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-court",
         buttonVariants[variant],
         buttonSizes[size],
         full && "w-full",
@@ -75,7 +75,7 @@ export function Card({
     <div
       onClick={onClick}
       className={cx(
-        "bg-surface border border-border rounded-(--radius-card) p-4",
+        "bg-surface border border-border rounded-(--radius-card) p-4 shadow-club",
         onClick && "cursor-pointer card-lift",
         className,
       )}
@@ -93,7 +93,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       ref={ref}
       className={cx(
         "w-full h-12 px-4 rounded-(--radius-field) bg-surface-2 border border-border text-ink placeholder:text-ink-faint",
-        "transition-colors duration-150 focus:outline-none focus:border-lime/60 focus:ring-2 focus:ring-lime/15",
+        "transition-colors duration-150 focus:outline-none focus:border-court/50 focus:ring-2 focus:ring-court/15",
         className,
       )}
       {...props}
@@ -108,7 +108,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
       ref={ref}
       className={cx(
         "w-full h-12 px-4 rounded-(--radius-field) bg-surface-2 border border-border text-ink appearance-none cursor-pointer",
-        "transition-colors duration-150 focus:outline-none focus:border-lime/60 focus:ring-2 focus:ring-lime/15",
+        "transition-colors duration-150 focus:outline-none focus:border-court/50 focus:ring-2 focus:ring-court/15",
         className,
       )}
       {...props}
@@ -234,7 +234,7 @@ export function Stepper({
 type BadgeTone = "lime" | "muted" | "success" | "danger" | "warning" | "info";
 
 const badgeTones: Record<BadgeTone, string> = {
-  lime: "bg-lime/10 text-lime border-lime/25",
+  lime: "bg-lime/40 text-court border-lime-deep/50",
   muted: "bg-surface-2 text-ink-muted border-border",
   success: "bg-success/10 text-success border-success/25",
   danger: "bg-danger/10 text-danger border-danger/25",
@@ -267,12 +267,12 @@ export function Badge({
 /* ---------- Avatar (initials) ---------- */
 
 const avatarPalette = [
-  "bg-lime/20 text-lime",
+  "bg-lime/50 text-court",
   "bg-info/20 text-info",
   "bg-success/20 text-success",
   "bg-warning/20 text-warning",
   "bg-danger/20 text-danger",
-  "bg-purple-400/20 text-purple-300",
+  "bg-purple-400/20 text-purple-800",
 ];
 
 export function initialsOf(name: string) {

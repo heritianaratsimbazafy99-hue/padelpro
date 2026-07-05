@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
       "Organise des americanos, mexicanos et tournois de padel : rotations équitables, scores en direct, QR code, statistiques.",
     start_url: "/dashboard",
     display: "standalone",
-    background_color: "#06080f",
-    theme_color: "#06080f",
+    background_color: "#f3f0e6",
+    theme_color: "#f3f0e6",
     icons: [
       {
         src: "/icon.svg",

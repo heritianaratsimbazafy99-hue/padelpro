@@ -94,7 +94,7 @@ export default function ProfilePage() {
         </section>
 
         <section className="mb-7">
-          <h2 className="text-sm font-extrabold uppercase tracking-wider text-ink-faint mb-3">
+          <h2 className="text-sm font-extrabold uppercase tracking-wider text-clay mb-3">
             Carrière
           </h2>
           <div className="grid grid-cols-2 gap-3">
@@ -104,7 +104,7 @@ export default function ProfilePage() {
                 className="stagger-i bg-surface border border-border rounded-(--radius-card) p-4 flex flex-col gap-2 card-lift"
                 style={{ "--i": i } as React.CSSProperties}
               >
-                <Icon className="size-5 text-lime" aria-hidden />
+                <Icon className="size-5 text-court" aria-hidden />
                 <p className="tnum text-2xl font-extrabold">
                   {value === undefined || value === null ? "–" : <CountUp value={value} suffix={suffix ?? ""} />}
                 </p>
@@ -115,7 +115,7 @@ export default function ProfilePage() {
           <p className="text-xs text-ink-faint mt-3 leading-relaxed">
             Tes stats se remplissent automatiquement quand tu sélectionnes ton nom dans un événement
             en étant connecté.{" "}
-            <Link href="/leaderboard" className="text-lime hover:underline">
+            <Link href="/leaderboard" className="text-court hover:underline">
               Voir le classement global
             </Link>
           </p>
@@ -123,7 +123,7 @@ export default function ProfilePage() {
 
         {/* Historique détaillé */}
         <section className="mb-7">
-          <h2 className="text-sm font-extrabold uppercase tracking-wider text-ink-faint mb-3">
+          <h2 className="text-sm font-extrabold uppercase tracking-wider text-clay mb-3">
             Historique des matchs
           </h2>
           {history === null ? (
@@ -175,7 +175,7 @@ export default function ProfilePage() {
         </section>
 
         <section className="mb-7">
-          <h2 className="text-sm font-extrabold uppercase tracking-wider text-ink-faint mb-3">
+          <h2 className="text-sm font-extrabold uppercase tracking-wider text-clay mb-3">
             Paramètres
           </h2>
           <form onSubmit={saveName} className="flex flex-col gap-3">

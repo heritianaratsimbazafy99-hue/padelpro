@@ -86,3 +86,12 @@ Direction artistique : papier crème (#f3f0e6), vert court profond (#14351f), li
 
 ### Piège corrigé (important pour la suite)
 `template.tsx` : l'animation d'entrée (`animate-page-in`, transform avec `fill: both`) faisait de son div le *containing block* de tous les descendants `position: fixed` (header flottant, wrapper ScrollSmoother) → double défilement et pins hors écran. La classe est désormais retirée en `onAnimationEnd`. Par ailleurs, ScrollSmoother doit être créé **avant** les ScrollTriggers épinglés (composant `GlobalMotion` monté en premier enfant), et les refs React d'un parent ne sont pas encore attachées pendant les effets de ses enfants (d'où un contexte GSAP global, sans scope).
+
+## 9. Alignement de l'app sur la DA « Club Éditorial »
+
+- ✅ La palette claire est désormais **globale** (`:root`) : landing et app authentifiée partagent les mêmes tokens (`.landing-light` n'est plus qu'un alias).
+- ✅ Boutons en pilules : primaire vert court/crème (btn-shine), secondaire papier, focus ring vert court.
+- ✅ Accents texte `text-lime` → `text-court` partout (contraste sur papier) ; éyebrows en terracotta ; statuts (success/danger/warning/info) réétalonnés pour fond clair.
+- ✅ Nav basse : pilule active **lime pleine** + libellé vert court ; cartes avec ombre papier `shadow-club` ; rayons élargis (cartes 1.5rem, champs 1rem).
+- ✅ Titres h1/h2 en Space Grotesk globalement ; médailles podium/classement recolorées (or ambre foncé, argent papier) ; backdrops de modales en voile vert (`bg-court/60` + blur).
+- ✅ Utilitaires re-calibrés pour le clair : `court-grid`, `glow-scene`, `noise`, `gradient-border`, `text-gradient`, `card-lift` ; `theme_color`/`background_color` du manifest en crème.

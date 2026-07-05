@@ -64,14 +64,14 @@ export default function SignupPage() {
           {awaitingConfirm ? (
             <div className="flex flex-col items-center text-center gap-3 py-4">
               <div className="size-14 rounded-2xl bg-lime/10 border border-lime/25 flex items-center justify-center">
-                <MailCheck className="size-7 text-lime" aria-hidden />
+                <MailCheck className="size-7 text-court" aria-hidden />
               </div>
               <h1 className="text-xl font-extrabold">Vérifie ta boîte mail</h1>
               <p className="text-sm text-ink-muted leading-relaxed">
                 Un lien de confirmation a été envoyé à <strong className="text-ink">{email}</strong>.
                 Clique dessus puis connecte-toi.
               </p>
-              <Link href="/login" className="text-lime font-semibold text-sm hover:underline">
+              <Link href="/login" className="text-court font-semibold text-sm hover:underline">
                 Aller à la connexion
               </Link>
             </div>
@@ -126,7 +126,7 @@ export default function SignupPage() {
         {!awaitingConfirm && (
           <p className="text-center text-sm text-ink-muted mt-5">
             Déjà inscrit ?{" "}
-            <Link href="/login" className="text-lime font-semibold hover:underline">
+            <Link href="/login" className="text-court font-semibold hover:underline">
               Se connecter
             </Link>
           </p>
