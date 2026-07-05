@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import type { Match, PadelEvent } from "@/lib/types";
-import { friendlyError } from "@/lib/utils";
 import { Button } from "./ui";
-import { useEscapeClose } from "./motion";
+import { useEscapeClose, useFocusTrap } from "./motion";
 
 /** Ligne de saisie d'une équipe : − / score / +.
  * Défini hors du composant parent : le re-créer à chaque rendu détruirait
@@ -53,21 +51,21 @@ function ScoreRow({
  * Americano/Mexicano : le total est fixe → régler le score d'une équipe ajuste
  * l'autre automatiquement (impossible de se tromper).
  * Tournoi : saisie libre des deux scores (jeux/sets), pas d'égalité.
+ * La validation est optimiste : `onReport` applique le score localement et
+ * la feuille se ferme aussitôt — le parent gère erreur/rollback (toast).
  */
 export function ScoreSheet({
   event,
   match,
   playerName,
-  reporter,
   onClose,
-  onSaved,
+  onReport,
 }: {
   event: PadelEvent;
   match: Match;
   playerName: (id: string | null) => string | null;
-  reporter: string;
   onClose: () => void;
-  onSaved: () => void;
+  onReport: (match: Match, score1: number, score2: number) => void;
 }) {
   const isPointsBased = event.format === "americano" || event.format === "mexicano";
   const total = event.settings.points_per_match ?? 24;
@@ -75,10 +73,10 @@ export function ScoreSheet({
   const [s2, setS2] = useState(
     match.score2 ?? (isPointsBased ? total - Math.floor(total / 2) : 0),
   );
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEscapeClose(true, onClose);
+  const trapRef = useFocusTrap<HTMLDivElement>();
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -101,34 +99,30 @@ export function ScoreSheet({
     if (isPointsBased) setS1(total - clamped);
   }
 
-  async function save() {
+  function save() {
     setError(null);
     if (!isPointsBased && s1 === s2) {
       setError("Un match de tournoi ne peut pas être nul.");
       return;
     }
-    setSaving(true);
-    const supabase = createClient();
-    const { error } = await supabase.rpc("report_score", {
-      p_match_id: match.id,
-      p_share_code: event.share_code,
-      p_score1: s1,
-      p_score2: s2,
-      p_reporter: reporter,
-    });
-    if (error) {
-      setError(friendlyError(error.message));
-      setSaving(false);
-      return;
-    }
-    onSaved();
+    /* Optimistic UI : le parent applique le score localement tout de suite ;
+       la feuille se ferme sans attendre la confirmation serveur. */
+    onReport(match, s1, s2);
     onClose();
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-label="Saisie du score">
+    <div
+      ref={trapRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex flex-col justify-end outline-none"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Saisie du score"
+    >
       <button
         aria-label="Fermer"
+        tabIndex={-1}
         className="absolute inset-0 bg-court/55 backdrop-blur-sm cursor-pointer animate-backdrop"
         onClick={onClose}
       />
@@ -161,7 +155,7 @@ export function ScoreSheet({
             {error}
           </p>
         )}
-        <Button size="lg" full loading={saving} onClick={save}>
+        <Button size="lg" full onClick={save}>
           Valider le score
         </Button>
       </div>

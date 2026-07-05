@@ -184,6 +184,64 @@ export function Confetti({ duration = 2800 }: { duration?: number }) {
   return null;
 }
 
+/**
+ * Piège le focus clavier dans une modale/sheet tant qu'elle est ouverte.
+ * - Attacher la ref retournée au conteneur du dialogue (avec tabIndex={-1}).
+ * - Au montage : focus sur [data-autofocus] s'il existe, sinon le conteneur.
+ * - Tab / Shift+Tab bouclent à l'intérieur ; à la fermeture, le focus
+ *   revient à l'élément qui avait ouvert le dialogue.
+ */
+export function useFocusTrap<T extends HTMLElement>(active = true) {
+  const ref = useRef<T | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    const container = ref.current;
+    if (!container) return;
+    const previous = document.activeElement as HTMLElement | null;
+
+    const focusables = () =>
+      Array.from(
+        container.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.getClientRects().length > 0);
+
+    const preferred = container.querySelector<HTMLElement>("[data-autofocus]");
+    (preferred ?? container).focus({ preventScroll: true });
+
+    const onKeydown = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const els = focusables();
+      if (els.length === 0) {
+        e.preventDefault();
+        container.focus({ preventScroll: true });
+        return;
+      }
+      const first = els[0];
+      const last = els[els.length - 1];
+      const current = document.activeElement;
+      if (e.shiftKey) {
+        if (current === first || !container.contains(current)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (current === last || !container.contains(current)) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeydown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeydown, true);
+      previous?.focus?.({ preventScroll: true });
+    };
+  }, [active]);
+
+  return ref;
+}
+
 /** Ferme une modale/sheet avec la touche Échap quand elle est ouverte. */
 export function useEscapeClose(active: boolean, onClose: () => void) {
   useEffect(() => {

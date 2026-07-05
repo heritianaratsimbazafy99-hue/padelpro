@@ -5,10 +5,10 @@ import Link from "next/link";
 import { Clock, PartyPopper, UserCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useEvent } from "@/lib/use-event";
-import { FORMAT_LABELS } from "@/lib/utils";
+import { FORMAT_LABELS, friendlyError } from "@/lib/utils";
 import type { Match } from "@/lib/types";
 import { Logo } from "@/components/logo";
-import { Avatar, Badge, EmptyState, PageLoader, Segmented } from "@/components/ui";
+import { Avatar, Badge, EmptyState, PageLoader, Segmented, Toast, type ToastData } from "@/components/ui";
 import { MatchCard } from "@/components/match-card";
 import { ScoreSheet } from "@/components/score-sheet";
 import { Standings } from "@/components/standings";
@@ -20,11 +20,14 @@ type Tab = "matches" | "standings";
 export default function JoinPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
   const supabase = useMemo(() => createClient(), []);
-  const { event, players, matches, loading, notFound, refresh } = useEvent({ shareCode: code });
+  const { event, players, matches, loading, notFound, refresh, reportScore } = useEvent({
+    shareCode: code,
+  });
   const [meId, setMeId] = useState<string | null>(null);
   const [identityLoaded, setIdentityLoaded] = useState(false);
   const [tab, setTab] = useState<Tab>("matches");
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null);
+  const [toast, setToast] = useState<ToastData | null>(null);
 
   const storageKey = event ? `padelpro:player:${event.id}` : null;
 
@@ -289,11 +292,18 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
           event={event}
           match={scoringMatch}
           playerName={playerName}
-          reporter={me.display_name}
           onClose={() => setScoringMatch(null)}
-          onSaved={refresh}
+          onReport={async (m, s1, s2) => {
+            const err = await reportScore(m, s1, s2, me.display_name);
+            setToast(
+              err
+                ? { message: friendlyError(err), tone: "danger" }
+                : { message: "Score enregistré", tone: "success" },
+            );
+          }}
         />
       )}
+      {toast && <Toast toast={toast} onDone={() => setToast(null)} />}
     </main>
   );
 }

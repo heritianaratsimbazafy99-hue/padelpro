@@ -5,13 +5,14 @@ import { QRCodeSVG } from "qrcode.react";
 import { Check, Copy, Share2, X } from "lucide-react";
 import { joinUrl } from "@/lib/utils";
 import { Button } from "./ui";
-import { useEscapeClose } from "./motion";
+import { useEscapeClose, useFocusTrap } from "./motion";
 
 /** Modale QR : les participants scannent pour rejoindre l'événement. */
 export function QRShare({ shareCode, onClose }: { shareCode: string; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const url = joinUrl(shareCode);
   useEscapeClose(true, onClose);
+  const trapRef = useFocusTrap<HTMLDivElement>();
 
   async function copy() {
     await navigator.clipboard.writeText(url);
@@ -33,12 +34,19 @@ export function QRShare({ shareCode, onClose }: { shareCode: string; onClose: ()
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-5"
+      ref={trapRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex items-center justify-center p-5 outline-none"
       role="dialog"
       aria-modal="true"
       aria-label="Partager l'événement"
     >
-      <button aria-label="Fermer" className="absolute inset-0 bg-court/60 backdrop-blur-sm cursor-pointer animate-backdrop" onClick={onClose} />
+      <button
+        aria-label="Fermer"
+        tabIndex={-1}
+        className="absolute inset-0 bg-court/60 backdrop-blur-sm cursor-pointer animate-backdrop"
+        onClick={onClose}
+      />
       <div className="relative bg-surface border border-border rounded-3xl p-6 w-full max-w-sm text-center animate-scale-in">
         <button
           onClick={onClose}

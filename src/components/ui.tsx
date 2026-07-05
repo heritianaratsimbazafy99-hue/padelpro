@@ -1,7 +1,7 @@
 "use client";
 
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
-import { Loader2 } from "lucide-react";
+import { forwardRef, useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -331,6 +331,47 @@ export function SkeletonList({ rows = 3, height = "h-20" }: { rows?: number; hei
       {Array.from({ length: rows }, (_, i) => (
         <Skeleton key={i} className={cx("w-full rounded-(--radius-card)", height)} />
       ))}
+    </div>
+  );
+}
+
+/* ---------- Toast (feedback éphémère) ---------- */
+
+export interface ToastData {
+  message: string;
+  tone?: "success" | "danger";
+}
+
+/**
+ * Toast éphémère : confirme une action (optimistic UI) ou signale une erreur.
+ * S'auto-détruit ; le parent le retire via onDone.
+ */
+export function Toast({ toast, onDone }: { toast: ToastData; onDone: () => void }) {
+  const danger = toast.tone === "danger";
+  useEffect(() => {
+    const t = setTimeout(onDone, danger ? 4500 : 2200);
+    return () => clearTimeout(t);
+  }, [danger, toast, onDone]);
+
+  return (
+    <div
+      role={danger ? "alert" : "status"}
+      className="fixed bottom-24 inset-x-0 z-[70] flex justify-center px-4 pointer-events-none"
+    >
+      <div
+        key={toast.message}
+        className={cx(
+          "flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold shadow-club-lg animate-scale-in pointer-events-auto",
+          danger ? "bg-danger text-white" : "bg-court text-cream",
+        )}
+      >
+        {danger ? (
+          <XCircle className="size-4 shrink-0" aria-hidden />
+        ) : (
+          <CheckCircle2 className="size-4 shrink-0 text-lime" aria-hidden />
+        )}
+        {toast.message}
+      </div>
     </div>
   );
 }

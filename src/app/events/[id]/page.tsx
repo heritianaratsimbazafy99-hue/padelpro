@@ -18,8 +18,18 @@ import { completeEvent, deleteEvent, nextMexicanoRound, startEvent } from "@/lib
 import { FORMAT_LABELS, friendlyError } from "@/lib/utils";
 import type { Match } from "@/lib/types";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
-import { Avatar, Badge, Button, EmptyState, Input, PageLoader, Segmented } from "@/components/ui";
-import { useEscapeClose } from "@/components/motion";
+import {
+  Avatar,
+  Badge,
+  Button,
+  EmptyState,
+  Input,
+  PageLoader,
+  Segmented,
+  Toast,
+  type ToastData,
+} from "@/components/ui";
+import { useEscapeClose, useFocusTrap } from "@/components/motion";
 import { MatchCard } from "@/components/match-card";
 import { ScoreSheet } from "@/components/score-sheet";
 import { Standings } from "@/components/standings";
@@ -32,12 +42,13 @@ type Tab = "matches" | "standings" | "players";
 export default function EventAdminPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const { event, players, matches, loading, notFound, refresh } = useEvent({ id });
+  const { event, players, matches, loading, notFound, refresh, reportScore } = useEvent({ id });
   const [tab, setTab] = useState<Tab>("matches");
   const [showQR, setShowQR] = useState(false);
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastData | null>(null);
   const [confirmAction, setConfirmAction] = useState<"complete" | "delete" | null>(null);
   const [newPlayer, setNewPlayer] = useState("");
   const [viewRound, setViewRound] = useState<number | null>(null);
@@ -49,6 +60,18 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
 
   useEscapeClose(confirmAction !== null, () => setConfirmAction(null));
   useEscapeClose(showQR, () => setShowQR(false));
+  const confirmTrapRef = useFocusTrap<HTMLDivElement>(confirmAction !== null);
+
+  /* Optimistic UI : le score s'applique localement tout de suite, le toast
+     confirme (ou signale le rollback en cas d'erreur serveur). */
+  async function handleReport(match: Match, s1: number, s2: number) {
+    const err = await reportScore(match, s1, s2, "organisateur");
+    setToast(
+      err
+        ? { message: friendlyError(err), tone: "danger" }
+        : { message: "Score enregistré", tone: "success" },
+    );
+  }
 
   if (loading) {
     return (
@@ -385,8 +408,20 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
 
       {/* Confirmation destructive */}
       {confirmAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-5" role="dialog" aria-modal="true">
-          <button aria-label="Annuler" className="absolute inset-0 bg-court/60 backdrop-blur-sm cursor-pointer animate-backdrop" onClick={() => setConfirmAction(null)} />
+        <div
+          ref={confirmTrapRef}
+          tabIndex={-1}
+          className="fixed inset-0 z-50 flex items-center justify-center p-5 outline-none"
+          role="dialog"
+          aria-modal="true"
+          aria-label={confirmAction === "delete" ? "Confirmer la suppression" : "Confirmer la clôture"}
+        >
+          <button
+            aria-label="Annuler"
+            tabIndex={-1}
+            className="absolute inset-0 bg-court/60 backdrop-blur-sm cursor-pointer animate-backdrop"
+            onClick={() => setConfirmAction(null)}
+          />
           <div className="relative bg-surface border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-in">
             <h2 className="text-lg font-extrabold mb-2">
               {confirmAction === "delete" ? "Supprimer l'événement ?" : "Terminer l'événement ?"}
@@ -427,11 +462,11 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
           event={event}
           match={scoringMatch}
           playerName={playerName}
-          reporter="organisateur"
           onClose={() => setScoringMatch(null)}
-          onSaved={refresh}
+          onReport={handleReport}
         />
       )}
+      {toast && <Toast toast={toast} onDone={() => setToast(null)} />}
       <BottomNav />
     </>
   );
