@@ -20,11 +20,14 @@ type Tab = "matches" | "standings";
 export default function JoinPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
   const supabase = useMemo(() => createClient(), []);
-  const { event, players, matches, loading, notFound, refresh } = useEvent({ shareCode: code });
+  const { event, players, matches, loading, notFound, refresh, applyOptimisticScore } = useEvent({
+    shareCode: code,
+  });
   const [meId, setMeId] = useState<string | null>(null);
   const [identityLoaded, setIdentityLoaded] = useState(false);
   const [tab, setTab] = useState<Tab>("matches");
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null);
+  const [scoreError, setScoreError] = useState<string | null>(null);
 
   const storageKey = event ? `padelpro:player:${event.id}` : null;
 
@@ -175,6 +178,12 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
         </div>
         <h1 className="text-2xl font-extrabold mb-5">{event.name}</h1>
 
+        {scoreError && (
+          <p role="alert" className="text-sm text-danger font-medium mb-4">
+            {scoreError}
+          </p>
+        )}
+
         {event.status === "draft" && (
           <EmptyState
             icon={<Clock className="size-6" />}
@@ -291,7 +300,12 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
           playerName={playerName}
           reporter={me.display_name}
           onClose={() => setScoringMatch(null)}
-          onSaved={refresh}
+          onSaved={() => {
+            setScoreError(null);
+            refresh();
+          }}
+          applyOptimisticScore={applyOptimisticScore}
+          onError={setScoreError}
         />
       )}
     </main>

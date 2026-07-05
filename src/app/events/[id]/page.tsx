@@ -19,7 +19,7 @@ import { FORMAT_LABELS, friendlyError } from "@/lib/utils";
 import type { Match } from "@/lib/types";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
 import { Avatar, Badge, Button, EmptyState, Input, PageLoader, Segmented } from "@/components/ui";
-import { useEscapeClose } from "@/components/motion";
+import { useEscapeClose, useFocusTrap } from "@/components/motion";
 import { MatchCard } from "@/components/match-card";
 import { ScoreSheet } from "@/components/score-sheet";
 import { Standings } from "@/components/standings";
@@ -32,7 +32,7 @@ type Tab = "matches" | "standings" | "players";
 export default function EventAdminPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const { event, players, matches, loading, notFound, refresh } = useEvent({ id });
+  const { event, players, matches, loading, notFound, refresh, applyOptimisticScore } = useEvent({ id });
   const [tab, setTab] = useState<Tab>("matches");
   const [showQR, setShowQR] = useState(false);
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null);
@@ -49,6 +49,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
 
   useEscapeClose(confirmAction !== null, () => setConfirmAction(null));
   useEscapeClose(showQR, () => setShowQR(false));
+  const confirmTrapRef = useFocusTrap<HTMLDivElement>(confirmAction !== null);
 
   if (loading) {
     return (
@@ -387,7 +388,11 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
       {confirmAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-5" role="dialog" aria-modal="true">
           <button aria-label="Annuler" className="absolute inset-0 bg-black/70 cursor-pointer animate-backdrop" onClick={() => setConfirmAction(null)} />
-          <div className="relative bg-surface border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-in">
+          <div
+            ref={confirmTrapRef}
+            tabIndex={-1}
+            className="relative bg-surface border border-border rounded-3xl p-6 w-full max-w-sm animate-scale-in outline-none"
+          >
             <h2 className="text-lg font-extrabold mb-2">
               {confirmAction === "delete" ? "Supprimer l'événement ?" : "Terminer l'événement ?"}
             </h2>
@@ -429,7 +434,12 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
           playerName={playerName}
           reporter="organisateur"
           onClose={() => setScoringMatch(null)}
-          onSaved={refresh}
+          onSaved={() => {
+            setError(null);
+            refresh();
+          }}
+          applyOptimisticScore={applyOptimisticScore}
+          onError={setError}
         />
       )}
       <BottomNav />

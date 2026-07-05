@@ -41,7 +41,7 @@ Chaque point est classé : ✅ corrigé dans cette refonte · 💡 recommandatio
 - ✅ Bottom sheet de score : vraie animation `sheet-up` + backdrop en fondu.
 - ✅ Modales QR/confirmation : `scale-in` + backdrop en fondu.
 - ✅ Clic sur l'arrière-plan ferme déjà (conservé).
-- 💡 Piéger le focus dans les modales (focus-trap) et restaurer le focus à la fermeture.
+- ✅ Focus piégé dans les modales (hook maison `useFocusTrap`) : focus initial sur le premier élément focusable, Tab/Shift+Tab bouclent dans le panneau, focus restauré au déclencheur à la fermeture (feuille de score, QR share, confirmations).
 
 ## 5. Responsive
 
@@ -62,9 +62,9 @@ Chaque point est classé : ✅ corrigé dans cette refonte · 💡 recommandatio
 
 ## 7. Recommandations futures (non bloquantes)
 
-1. **Focus-trap** dans les modales (ou migration vers `<dialog>` natif).
-2. **Optimistic UI** sur la saisie de score (mise à jour locale avant confirmation serveur).
+1. ✅ **Focus-trap** dans les modales — hook `useFocusTrap` (src/components/motion.tsx), branché sur la feuille de score, la modale QR et le dialogue de confirmation ; restauration du focus au déclencheur à la fermeture.
+2. ✅ **Optimistic UI** sur la saisie de score — `applyOptimisticScore` dans `useEvent` : la sheet se ferme immédiatement, le match passe « Terminé » localement, rollback + erreur `role="alert"` si le RPC échoue, réconciliation propre avec le realtime Supabase.
 3. **Vue TV / plein écran** du classement live pour le club (QR en overlay).
-4. **Confettis** sur le podium en fin d'événement (canvas léger, respectant reduced-motion).
+4. ✅ **Confettis** sur le podium — canvas maison (~60 lignes, zéro dépendance) dans `podium.tsx`, burst unique aux couleurs du thème, `prefers-reduced-motion` respecté, `aria-hidden` + `pointer-events: none`.
 5. **PWA offline** : cacher le dernier état de l'événement pour les zones sans réseau.
 6. **Swipe entre rounds** sur mobile (gestes horizontaux sur le sélecteur de rounds).

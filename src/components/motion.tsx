@@ -130,6 +130,64 @@ export function useEscapeClose(active: boolean, onClose: () => void) {
 }
 
 /**
+ * Focus-trap pour modales/sheets : à l'activation, mémorise l'élément
+ * déclencheur, place le focus sur le premier élément focusable du conteneur
+ * (souvent le bouton de fermeture), fait boucler Tab / Shift+Tab à
+ * l'intérieur, puis restaure le focus au déclencheur à la fermeture.
+ * Attacher la ref renvoyée au panneau de la modale.
+ */
+export function useFocusTrap<T extends HTMLElement>(active: boolean) {
+  const ref = useRef<T | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    const container = ref.current;
+    if (!container) return;
+    const previous = document.activeElement as HTMLElement | null;
+
+    const selector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    // Éléments focusables réellement rendus (exclut les éléments cachés).
+    const focusables = () =>
+      Array.from(container.querySelectorAll<HTMLElement>(selector)).filter(
+        (el) => el.getClientRects().length > 0,
+      );
+
+    const first = focusables()[0];
+    (first ?? container).focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const els = focusables();
+      if (els.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const firstEl = els[0];
+      const lastEl = els[els.length - 1];
+      const current = document.activeElement;
+      if (e.shiftKey) {
+        if (current === firstEl || !container.contains(current)) {
+          e.preventDefault();
+          lastEl.focus();
+        }
+      } else if (current === lastEl || !container.contains(current)) {
+        e.preventDefault();
+        firstEl.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      previous?.focus();
+    };
+  }, [active]);
+
+  return ref;
+}
+
+/**
  * Spotlight curseur : renvoie un onMouseMove qui positionne le halo
  * radial des cartes .spotlight (variables CSS --spot-x / --spot-y).
  */

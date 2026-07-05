@@ -11,6 +11,12 @@ export interface EventData {
   loading: boolean;
   notFound: boolean;
   refresh: () => Promise<void>;
+  /**
+   * Marque localement un match comme terminé avec le score donné, sans
+   * attendre le serveur (optimistic UI). Renvoie une fonction de rollback
+   * à appeler si l'appel RPC échoue.
+   */
+  applyOptimisticScore: (matchId: string, score1: number, score2: number) => () => void;
 }
 
 /**
@@ -25,6 +31,8 @@ export function useEvent(key: { id?: string; shareCode?: string }): EventData {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const eventIdRef = useRef<string | null>(null);
+  // Scores optimistes en attente de confirmation serveur (matchId → score).
+  const optimisticRef = useRef(new Map<string, { score1: number; score2: number }>());
 
   const load = useCallback(async () => {
     let query = supabase.from("events").select("*");
@@ -49,12 +57,46 @@ export function useEvent(key: { id?: string; shareCode?: string }): EventData {
         .order("court"),
     ]);
 
+    // Réconciliation : on ré-applique les scores optimistes non confirmés par
+    // le serveur (un rechargement en vol ne doit pas faire « re-ouvrir » un
+    // match validé) ; dès que le serveur renvoie le match terminé, la vraie
+    // donnée reprend la main et l'overlay est levé.
+    const merged = ((mts ?? []) as Match[]).map((m) => {
+      const opt = optimisticRef.current.get(m.id);
+      if (!opt) return m;
+      if (m.status === "done") {
+        optimisticRef.current.delete(m.id);
+        return m;
+      }
+      return { ...m, score1: opt.score1, score2: opt.score2, status: "done" as const };
+    });
+
     setEvent(ev as PadelEvent);
     setPlayers((pls ?? []) as EventPlayer[]);
-    setMatches((mts ?? []) as Match[]);
+    setMatches(merged);
     setNotFound(false);
     setLoading(false);
   }, [supabase, key.id, key.shareCode]);
+
+  const applyOptimisticScore = useCallback(
+    (matchId: string, score1: number, score2: number) => {
+      optimisticRef.current.set(matchId, { score1, score2 });
+      let snapshot: Match | undefined;
+      setMatches((prev) =>
+        prev.map((m) => {
+          if (m.id !== matchId) return m;
+          snapshot = m;
+          return { ...m, score1, score2, status: "done" as const };
+        }),
+      );
+      // Rollback : lève l'overlay et restaure l'état du match d'avant l'optimisme.
+      return () => {
+        optimisticRef.current.delete(matchId);
+        setMatches((prev) => prev.map((m) => (m.id === matchId && snapshot ? snapshot : m)));
+      };
+    },
+    [],
+  );
 
   useEffect(() => {
     load();
@@ -86,5 +128,5 @@ export function useEvent(key: { id?: string; shareCode?: string }): EventData {
     };
   }, [supabase, event?.id, load]);
 
-  return { event, players, matches, loading, notFound, refresh: load };
+  return { event, players, matches, loading, notFound, refresh: load, applyOptimisticScore };
 }
