@@ -2,13 +2,13 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Clock, MapPin, PartyPopper, UserCheck } from "lucide-react";
+import { Clock, PartyPopper, UserCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useEvent } from "@/lib/use-event";
 import { FORMAT_LABELS } from "@/lib/utils";
 import type { Match } from "@/lib/types";
 import { Logo } from "@/components/logo";
-import { Avatar, Badge, Button, EmptyState, PageLoader, Segmented } from "@/components/ui";
+import { Avatar, Badge, EmptyState, PageLoader, Segmented } from "@/components/ui";
 import { MatchCard } from "@/components/match-card";
 import { ScoreSheet } from "@/components/score-sheet";
 import { Standings } from "@/components/standings";

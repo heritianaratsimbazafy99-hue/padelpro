@@ -117,6 +117,73 @@ export function CountUp({
   );
 }
 
+/**
+ * Confettis de célébration (canvas léger, sans dépendance).
+ * Monté une fois : burst aux couleurs du club puis auto-nettoyage.
+ * Ne fait rien si prefers-reduced-motion.
+ */
+export function Confetti({ duration = 2800 }: { duration?: number }) {
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const canvas = document.createElement("canvas");
+    canvas.style.cssText =
+      "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:80";
+    canvas.setAttribute("aria-hidden", "true");
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      canvas.remove();
+      return;
+    }
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    ctx.scale(dpr, dpr);
+
+    const colors = ["#c8f542", "#14351f", "#e8582f", "#b3e42e", "#f3f0e6"];
+    const parts = Array.from({ length: 130 }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: -20 - Math.random() * window.innerHeight * 0.4,
+      w: 6 + Math.random() * 6,
+      h: 8 + Math.random() * 8,
+      vy: 2.2 + Math.random() * 3.4,
+      vx: -1.2 + Math.random() * 2.4,
+      rot: Math.random() * Math.PI,
+      vr: -0.12 + Math.random() * 0.24,
+      color: colors[Math.floor(Math.random() * colors.length)],
+    }));
+
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (t: number) => {
+      const elapsed = t - t0;
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      const fade = Math.max(0, 1 - elapsed / duration);
+      for (const p of parts) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rot += p.vr;
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      }
+      if (elapsed < duration) raf = requestAnimationFrame(tick);
+      else canvas.remove();
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      canvas.remove();
+    };
+  }, [duration]);
+
+  return null;
+}
+
 /** Ferme une modale/sheet avec la touche Échap quand elle est ouverte. */
 export function useEscapeClose(active: boolean, onClose: () => void) {
   useEffect(() => {

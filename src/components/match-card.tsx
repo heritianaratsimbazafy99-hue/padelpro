@@ -1,7 +1,7 @@
 "use client";
 
 import { MapPin } from "lucide-react";
-import type { EventPlayer, Match } from "@/lib/types";
+import type { Match } from "@/lib/types";
 import { Avatar } from "./ui";
 
 function TeamLine({

@@ -57,7 +57,10 @@ export function useEvent(key: { id?: string; shareCode?: string }): EventData {
   }, [supabase, key.id, key.shareCode]);
 
   useEffect(() => {
-    load();
+    // Chargement initial : les setState de `load` surviennent après des
+    // await, jamais de façon synchrone dans le corps de l'effet.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
   }, [load]);
 
   // Realtime : toute modification sur l'événement recharge les données.

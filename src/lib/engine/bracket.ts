@@ -116,7 +116,7 @@ export function composeTeams(
   if (players.length < 4 || players.length % 2 !== 0) {
     throw new Error("Il faut un nombre pair de joueurs (minimum 4).");
   }
-  let pool = [...players];
+  const pool = [...players];
   const teams: Array<{ p1: string; p2: string; strength: number }> = [];
   if (mode === "balanced") {
     pool.sort((a, b) => b.level - a.level);

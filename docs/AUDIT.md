@@ -95,3 +95,19 @@ Direction artistique : papier crème (#f3f0e6), vert court profond (#14351f), li
 - ✅ Nav basse : pilule active **lime pleine** + libellé vert court ; cartes avec ombre papier `shadow-club` ; rayons élargis (cartes 1.5rem, champs 1rem).
 - ✅ Titres h1/h2 en Space Grotesk globalement ; médailles podium/classement recolorées (or ambre foncé, argent papier) ; backdrops de modales en voile vert (`bg-court/60` + blur).
 - ✅ Utilitaires re-calibrés pour le clair : `court-grid`, `glow-scene`, `noise`, `gradient-border`, `text-gradient`, `card-lift` ; `theme_color`/`background_color` du manifest en crème.
+
+## 10. Audit fonctionnel complet (E2E) & corrections
+
+### Vérification
+- ✅ **Moteur de jeu : 13/13 tests** (`node --test` sur `engine.test.ts`) — rotations americano, mexicano, brackets, équilibrage, stress 20 joueurs/10 rounds.
+- ✅ **Base Supabase** : RLS actif sur les 4 tables ; les warnings « SECURITY DEFINER exécutable par anon » sur `report_score`/`claim_player`/`global_leaderboard` sont **voulus** (flux invités par QR code, validés par share_code).
+- ✅ **E2E réel 10/10** via `scripts/supabase-mock.mjs` (mock GoTrue + PostgREST + RPC local) et `scripts/e2e.mjs` (Playwright) : signup → dashboard → wizard americano (4 joueurs/3 rounds) → lancement → QR/share code → claim joueur connecté → score participant → scores organisateur → classement live → clôture + podium → Elo global → profil/historique → logout/login. Zéro erreur JS.
+  - Rejouer : `node scripts/supabase-mock.mjs 4545` + build avec `NEXT_PUBLIC_SUPABASE_URL=http://localhost:4545` + `node scripts/e2e.mjs`.
+
+### Bugs corrigés
+- `ScoreSheet` : sous-composant `ScoreRow` défini dans le rendu (DOM remonté à chaque frappe → perte de focus/animations) — extrait au niveau module.
+- `use-event` : chargement initial annoté (les setState suivent des `await`) ; `bracket.ts` : `prefer-const` ; imports morts purgés (join, match-card, score-sheet). **Lint : 0 erreur, 0 warning.**
+
+### Améliorations UI/UX
+- 🏆 **Podium en estrade** : trois colonnes 2ᵉ·1ᵉʳ·3ᵉ qui montent en cascade (`podium-rise`), couronne terracotta flottante, points affichés, **confettis** aux couleurs du club (canvas léger sans dépendance, respecte reduced-motion) — reco n°4 de l'audit initial.
+- Pop de score en terracotta (lisible sur papier), tampon E2E sur tout le parcours mobile.

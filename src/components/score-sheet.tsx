@@ -3,10 +3,50 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import type { EventPlayer, Match, PadelEvent } from "@/lib/types";
+import type { Match, PadelEvent } from "@/lib/types";
 import { friendlyError } from "@/lib/utils";
 import { Button } from "./ui";
 import { useEscapeClose } from "./motion";
+
+/** Ligne de saisie d'une équipe : − / score / +.
+ * Défini hors du composant parent : le re-créer à chaque rendu détruirait
+ * et remonterait le DOM (perte de focus, animations relancées). */
+function ScoreRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <p className="flex-1 text-sm font-semibold truncate">{label}</p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          aria-label={`Moins de points pour ${label}`}
+          onClick={() => onChange(value - 1)}
+          className="size-12 rounded-xl bg-surface-2 border border-border text-xl font-bold cursor-pointer transition-colors hover:border-border-strong active:scale-95"
+        >
+          −
+        </button>
+        <span key={value} className="tnum w-14 text-center text-3xl font-extrabold animate-score-pop">
+          {value}
+        </span>
+        <button
+          type="button"
+          aria-label={`Plus de points pour ${label}`}
+          onClick={() => onChange(value + 1)}
+          className="size-12 rounded-xl bg-lime/10 border border-lime/30 text-court text-xl font-bold cursor-pointer transition-colors hover:bg-lime/20 active:scale-95"
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Bottom sheet de saisie de score.
@@ -83,43 +123,6 @@ export function ScoreSheet({
     }
     onSaved();
     onClose();
-  }
-
-  function ScoreRow({
-    label,
-    value,
-    onChange,
-  }: {
-    label: string;
-    value: number;
-    onChange: (v: number) => void;
-  }) {
-    return (
-      <div className="flex items-center gap-3">
-        <p className="flex-1 text-sm font-semibold truncate">{label}</p>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label={`Moins de points pour ${label}`}
-            onClick={() => onChange(value - 1)}
-            className="size-12 rounded-xl bg-surface-2 border border-border text-xl font-bold cursor-pointer transition-colors hover:border-border-strong active:scale-95"
-          >
-            −
-          </button>
-          <span key={value} className="tnum w-14 text-center text-3xl font-extrabold animate-score-pop">
-            {value}
-          </span>
-          <button
-            type="button"
-            aria-label={`Plus de points pour ${label}`}
-            onClick={() => onChange(value + 1)}
-            className="size-12 rounded-xl bg-lime/10 border border-lime/30 text-court text-xl font-bold cursor-pointer transition-colors hover:bg-lime/20 active:scale-95"
-          >
-            +
-          </button>
-        </div>
-      </div>
-    );
   }
 
   return (
