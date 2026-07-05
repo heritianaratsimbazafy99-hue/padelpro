@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { forwardRef, useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 function cx(...parts: Array<string | false | null | undefined>) {
@@ -161,11 +161,23 @@ export function Segmented<T extends string>({
   onChange: (v: T) => void;
   className?: string;
 }) {
+  const index = options.findIndex((o) => o.value === value);
   return (
     <div
       role="radiogroup"
-      className={cx("flex p-1 bg-surface-2 border border-border rounded-xl gap-1", className)}
+      className={cx("relative flex p-1 bg-surface-2 border border-border rounded-xl", className)}
     >
+      {/* Pilule active : glisse d'un onglet à l'autre */}
+      {index >= 0 && (
+        <span
+          aria-hidden
+          className="absolute top-1 bottom-1 left-1 rounded-lg bg-lime shadow-club transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{
+            width: `calc((100% - 0.5rem) / ${options.length})`,
+            transform: `translateX(${index * 100}%)`,
+          }}
+        />
+      )}
       {options.map((opt) => (
         <button
           key={opt.value}
@@ -174,16 +186,35 @@ export function Segmented<T extends string>({
           aria-checked={value === opt.value}
           onClick={() => onChange(opt.value)}
           className={cx(
-            "flex-1 h-10 px-2 rounded-lg text-sm font-semibold cursor-pointer transition-all duration-150",
-            value === opt.value
-              ? "bg-lime text-on-lime"
-              : "text-ink-muted hover:text-ink",
+            "relative z-10 flex-1 h-10 px-2 rounded-lg text-sm font-semibold cursor-pointer transition-colors duration-200 active:scale-[0.97]",
+            value === opt.value ? "text-on-lime" : "text-ink-muted hover:text-ink",
           )}
         >
           {opt.label}
         </button>
       ))}
     </div>
+  );
+}
+
+/* ---------- PopValue (pop du chiffre quand la valeur change) ---------- */
+
+/**
+ * Affiche une valeur qui « pope » (scale + flash terracotta) à chaque
+ * changement APRÈS le montage — aucun effet au premier rendu, pour ne pas
+ * faire clignoter les listes au chargement.
+ */
+export function PopValue({ value, className }: { value: ReactNode; className?: string }) {
+  const [prev, setPrev] = useState(value);
+  const [gen, setGen] = useState(0);
+  if (prev !== value) {
+    setPrev(value);
+    setGen((g) => g + 1);
+  }
+  return (
+    <span key={gen} className={cx("inline-block", gen > 0 && "animate-score-pop", className)}>
+      {value}
+    </span>
   );
 }
 
@@ -211,17 +242,17 @@ export function Stepper({
         aria-label={`Réduire ${label}`}
         onClick={() => onChange(Math.max(min, value - step))}
         disabled={value <= min}
-        className="size-11 rounded-xl bg-surface-2 border border-border text-ink text-xl font-bold cursor-pointer transition-colors hover:border-border-strong disabled:opacity-30 disabled:cursor-default"
+        className="size-11 rounded-xl bg-surface-2 border border-border text-ink text-xl font-bold cursor-pointer transition-all hover:border-border-strong active:scale-95 disabled:opacity-30 disabled:cursor-default"
       >
         −
       </button>
-      <span className="tnum min-w-12 text-center text-2xl font-extrabold">{value}</span>
+      <PopValue value={value} className="tnum min-w-12 text-center text-2xl font-extrabold" />
       <button
         type="button"
         aria-label={`Augmenter ${label}`}
         onClick={() => onChange(Math.min(max, value + step))}
         disabled={value >= max}
-        className="size-11 rounded-xl bg-surface-2 border border-border text-ink text-xl font-bold cursor-pointer transition-colors hover:border-border-strong disabled:opacity-30 disabled:cursor-default"
+        className="size-11 rounded-xl bg-surface-2 border border-border text-ink text-xl font-bold cursor-pointer transition-all hover:border-border-strong active:scale-95 disabled:opacity-30 disabled:cursor-default"
       >
         +
       </button>
@@ -361,7 +392,7 @@ export function Toast({ toast, onDone }: { toast: ToastData; onDone: () => void 
       <div
         key={toast.message}
         className={cx(
-          "flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold shadow-club-lg animate-scale-in pointer-events-auto",
+          "flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold shadow-club-lg animate-scale-in",
           danger ? "bg-danger text-white" : "bg-court text-cream",
         )}
       >
@@ -390,7 +421,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center text-center gap-3 py-14 px-6">
+    <div className="flex flex-col items-center text-center gap-3 py-14 px-6 animate-scale-in">
       {icon && (
         <div className="size-14 rounded-2xl bg-surface-2 border border-border flex items-center justify-center text-ink-faint animate-float">
           {icon}

@@ -93,7 +93,57 @@ await check("la modale QR expose le code de partage", async () => {
   await page.keyboard.press("Escape");
 });
 
-/* 5. Flux participant : claim + score ------------------------------------ */
+/* 4bis. Focus-trap de la modale QR ---------------------------------------- */
+await check("le focus est piégé dans la modale QR puis restauré au déclencheur", async () => {
+  await page.click('button[aria-label="Partager par QR code"]');
+  await expectVisible(page.getByRole("dialog"));
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press("Tab");
+    const inside = await page.evaluate(() => {
+      const dlg = document.querySelector('[role="dialog"]');
+      return !!dlg && dlg.contains(document.activeElement);
+    });
+    if (!inside) throw new Error(`focus sorti du dialogue au Tab n°${i + 1}`);
+  }
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  const restored = await page.evaluate(
+    () => document.activeElement?.getAttribute("aria-label") === "Partager par QR code",
+  );
+  if (!restored) throw new Error("focus non restauré sur le bouton déclencheur");
+});
+
+/* 4ter. Rollback optimiste : le RPC échoue → score restauré + toast -------- */
+await check("optimistic UI : rollback propre et feedback quand le RPC échoue", async () => {
+  await page.route("**/rpc/report_score", (route) =>
+    route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "panne simulée par l'E2E", code: "P0001" }),
+    }),
+  );
+  // Ouvre la première carte de match « à jouer » et valide un score
+  const matchButtons = await page.locator("main").getByRole("button").all();
+  for (const b of matchButtons) {
+    const txt = (await b.textContent()) ?? "";
+    if (/&/.test(txt) && !/\d+\s*[–-]\s*\d+/.test(txt) && !/^R\d/.test(txt.trim())) {
+      await b.click();
+      break;
+    }
+  }
+  await expectVisible(page.getByRole("dialog"));
+  await page.locator('button[aria-label^="Plus de points"]').first().click();
+  await page.getByRole("button", { name: /Valider|Enregistrer/ }).click();
+  // Feedback d'erreur (toast rouge) + retour du match à l'état « À jouer »
+  await expectVisible(page.getByText("panne simulée par l'E2E"), 5000);
+  await page.unroute("**/rpc/report_score");
+  await page.waitForTimeout(600);
+  const pending = await page.locator("main").getByText("À jouer").count();
+  if (pending < 1) throw new Error("le rollback n'a pas restauré le match à « À jouer »");
+  await shot("rollback-toast");
+});
+
+/* 5. Flux participant : claim + score (optimiste) -------------------------- */
 await check("un participant (connecté) choisit son nom et annonce un score", async () => {
   await page.goto(BASE + "/join/" + shareCode, { waitUntil: "networkidle" });
   await expectVisible(page.getByText("Qui es-tu ?"));
@@ -104,13 +154,39 @@ await check("un participant (connecté) choisit son nom et annonce un score", as
   // Ouvre la feuille de score du prochain match
   await page.getByText("Ton prochain match").locator("..").getByRole("button").first().click();
   await expectVisible(page.getByRole("dialog"));
+  // Focus-trap : Tab reste dans la feuille de score
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press("Tab");
+    const inside = await page.evaluate(() => {
+      const dlg = document.querySelector('[role="dialog"]');
+      return !!dlg && dlg.contains(document.activeElement);
+    });
+    if (!inside) throw new Error(`focus sorti de la feuille de score au Tab n°${i + 1}`);
+  }
   // Ajuste : +2 pour l'équipe 1 (12→14 si 24 pts répartis 12/12 par défaut)
   const plus = page.locator('button[aria-label^="Plus de points"]').first();
   await plus.click();
   await plus.click();
   await shot("score-sheet");
+  // Optimistic UI : on retarde volontairement le RPC — le score doit
+  // apparaître AVANT la réponse serveur.
+  await page.route("**/rpc/report_score", async (route) => {
+    await new Promise((r) => setTimeout(r, 1200));
+    await route.continue();
+  });
   await page.getByRole("button", { name: /Valider|Enregistrer/ }).click();
-  await page.waitForTimeout(800);
+  await expectVisible(page.locator("main").getByText("14").first(), 900);
+  const sheetGone = await page
+    .getByRole("dialog")
+    .waitFor({ state: "hidden", timeout: 900 })
+    .then(() => true)
+    .catch(() => false);
+  if (!sheetGone) throw new Error("la feuille de score ne s'est pas fermée immédiatement");
+  await shot("join-score-optimiste");
+  // Confirmation serveur : toast de succès
+  await expectVisible(page.getByText("Score enregistré"), 5000);
+  await page.unroute("**/rpc/report_score");
+  await page.waitForTimeout(400);
   await shot("join-apres-score");
 });
 

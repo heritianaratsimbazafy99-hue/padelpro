@@ -1,9 +1,10 @@
 "use client";
 
+import { useLayoutEffect, useRef } from "react";
 import { Crown } from "lucide-react";
 import type { EventPlayer, Match } from "@/lib/types";
 import { computeStandings } from "@/lib/engine/standings";
-import { Avatar } from "./ui";
+import { Avatar, PopValue } from "./ui";
 
 const medalTones = [
   "bg-lime/15 text-court border-lime/30",
@@ -26,6 +27,31 @@ export function Standings({
   const rows = computeStandings(players, matches);
   const anyPlayed = rows.some((r) => r.played > 0);
 
+  /* FLIP : quand l'ordre change (score optimiste, Realtime), chaque ligne
+     glisse de son ancienne position vers la nouvelle au lieu de sauter. */
+  const listRef = useRef<HTMLOListElement>(null);
+  const prevTops = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const items = Array.from(list.querySelectorAll<HTMLElement>("[data-player-row]"));
+    const nextTops = new Map<string, number>();
+    for (const el of items) {
+      const id = el.dataset.playerRow!;
+      const top = el.getBoundingClientRect().top;
+      const prev = prevTops.current.get(id);
+      if (!reduced && prev !== undefined && Math.abs(prev - top) > 1) {
+        el.animate(
+          [{ transform: `translateY(${prev - top}px)` }, { transform: "translateY(0)" }],
+          { duration: 450, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+        );
+      }
+      nextTops.set(id, top);
+    }
+    prevTops.current = nextTops;
+  });
+
   return (
     <div className="bg-surface border border-border rounded-(--radius-card) overflow-hidden">
       <div
@@ -42,13 +68,14 @@ export function Standings({
         )}
         <span className="text-right">Pts</span>
       </div>
-      <ol>
+      <ol ref={listRef}>
         {rows.map((row, i) => {
           const me = row.playerId === meId;
           return (
             <li
               key={row.playerId}
-              className={`grid items-center gap-2 px-4 py-2.5 border-b border-border last:border-b-0 ${
+              data-player-row={row.playerId}
+              className={`grid items-center gap-2 px-4 py-2.5 border-b border-border last:border-b-0 bg-surface ${
                 me ? "bg-lime/5" : ""
               }`}
               style={{
@@ -75,7 +102,9 @@ export function Standings({
                   <span className="tnum text-center text-sm text-ink-muted">{row.wins}</span>
                 </>
               )}
-              <span className="tnum text-right text-base font-extrabold">{row.pointsFor}</span>
+              <span className="tnum text-right text-base font-extrabold">
+                <PopValue value={row.pointsFor} />
+              </span>
             </li>
           );
         })}

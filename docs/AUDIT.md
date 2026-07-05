@@ -111,3 +111,80 @@ Direction artistique : papier crème (#f3f0e6), vert court profond (#14351f), li
 ### Améliorations UI/UX
 - 🏆 **Podium en estrade** : trois colonnes 2ᵉ·1ᵉʳ·3ᵉ qui montent en cascade (`podium-rise`), couronne terracotta flottante, points affichés, **confettis** aux couleurs du club (canvas léger sans dépendance, respecte reduced-motion) — reco n°4 de l'audit initial.
 - Pop de score en terracotta (lisible sur papier), tampon E2E sur tout le parcours mobile.
+
+## 11. Hero « L'Americano vivant », focus-trap, optimistic UI & passe d'animations
+
+### Hero — refonte complète de l'animation (pièce maîtresse)
+Trois concepts évalués : ① terrain de padel pseudo-3D qui joue un americano en
+boucle, ② bracket qui se remplit tout seul, ③ mockup téléphone + flux QR.
+Retenu : **① « L'Americano vivant »** (`src/components/landing/court-scene.tsx`),
+le seul qui raconte TOUT le produit d'un coup d'œil — le padel, les rotations,
+le score live, le classement.
+
+- **Terrain pseudo-3D** en CSS pur (`rotateX(55°) rotateZ(-33°)`, `preserve-3d`) :
+  surface vert court, marquages SVG crème, filet et vitre de fond « debout »
+  (rotateX 90°), joueurs et balle **billboardés** (contre-rotation `rotateZ(33°)
+  rotateX(-55°)`) pour rester face caméra.
+- **Une timeline GSAP maîtresse déterministe** (scénario scripté, boucle ~30 s) :
+  3 rounds d'americano avec **rotation des paires** (les pucks glissent vers
+  leurs nouveaux slots, la couleur d'équipe des maillots change), échanges de
+  balle avec vraie physique (arc via translateY billboardé, squash à la frappe,
+  ombre qui se détache pendant le vol), score qui pope point par point, flash
+  lime côté vainqueur, **classement live qui se réordonne** après chaque round,
+  couronne du vainqueur au dernier round (Marco renverse Léa — il y a une
+  histoire), puis reset chorégraphié.
+- **Chips UI en espace écran** (scoreboard live, classement, sticker QR) en
+  parallaxe souris, tilt 3D de toute la scène au survol (desktop pointeur fin).
+- **Perf** : uniquement des transforms/opacity (compositeur GPU), ~20 éléments,
+  zéro dépendance ajoutée, `ResizeObserver → invalidate()` pour le responsive.
+- **Reduced-motion** : aucune timeline créée — la scène statique reste une
+  illustration complète et lisible (joueurs placés, score 14–10, classement
+  rempli). Conteneur `role="img"` + `aria-label` descriptif, tout le décor
+  `aria-hidden`.
+
+### Focus-trap (reco n°1 de l'audit initial) — ✅ fait
+- Nouveau hook **`useFocusTrap`** (`motion.tsx`) : Tab/Shift+Tab bouclent dans
+  le dialogue, focus initial sur `[data-autofocus]` ou le conteneur,
+  **restauration au déclencheur** à la fermeture.
+- Appliqué aux trois surfaces : `ScoreSheet`, `QRShare`, confirmation
+  d'événement (`events/[id]`). Les backdrops passent en `tabIndex={-1}`
+  (fermeture clavier = Échap ou bouton X, plus de tab-stop invisible).
+- Couvert par l'E2E : cycle de 8 Tab dans la modale QR + restauration du focus,
+  et cycle dans la feuille de score.
+
+### Optimistic UI sur la saisie de score (reco n°2) — ✅ fait
+- **`useEvent.reportScore()`** : le match passe `done` avec ses scores
+  **localement, avant le RPC** → carte de match et classement bougent
+  instantanément, la feuille se ferme sans attendre.
+- **Anti-clignotement** : les patchs optimistes en attente sont réappliqués
+  par-dessus tout rechargement concurrent (Realtime compris) via une map de
+  matchs « pending », purgée à la confirmation ; la réconciliation `load()`
+  ramène silencieusement la vérité serveur (mêmes valeurs → aucun flash).
+- **Rollback propre** : en cas d'erreur RPC, le match d'origine est restauré,
+  un `load()` resynchronise, et un **toast** d'erreur (nouveau composant
+  `Toast`, `role="alert"`) explique — toast de succès sinon.
+- Couvert par l'E2E : RPC volontairement **retardé de 1,2 s** (le score doit
+  apparaître avant la réponse) et RPC **en échec simulé** (toast rouge + match
+  restauré à « À jouer »).
+
+### Passe d'animations sur la plateforme authentifiée
+- **`Segmented`** : pilule lime **coulissante** entre les onglets (même langage
+  que la nav basse), pression `active:scale`.
+- **`Standings`** : réordonnancement **FLIP** (WAAPI, sans lib) — les lignes
+  glissent vers leur nouveau rang quand un score tombe (optimiste ou Realtime).
+- **`PopValue`** (kit UI) : pop terracotta d'un chiffre **uniquement quand la
+  valeur change après montage** (aucun clignotement au chargement des listes) —
+  appliqué aux scores des cartes de match, aux points du classement et au
+  stepper du wizard.
+- **`EmptyState`** : entrée `scale-in` (+ icône flottante existante) ;
+  **`Toast`** réutilisable pour le feedback des actions clés.
+- Déjà en place et conservés : transitions de pages (`template.tsx`), cascades
+  `stagger-i` des listes, squelettes shimmer, pilule de nav basse, compteurs.
+- `prefers-reduced-motion` : FLIP gardé par `matchMedia`, le reste neutralisé
+  par la règle CSS globale.
+
+### Vérification
+- **E2E 12/12** (10 étapes historiques + 2 nouvelles : focus-trap, optimistic
+  UI avec rollback), **zéro erreur JS** ; captures desktop/mobile + états
+  intermédiaires de l'animation hero.
+- **Moteur 13/13** (`node --test`), **lint 0 erreur / 0 warning**, build prod OK.

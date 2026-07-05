@@ -2,7 +2,7 @@
 
 import { MapPin } from "lucide-react";
 import type { Match } from "@/lib/types";
-import { Avatar } from "./ui";
+import { Avatar, PopValue } from "./ui";
 
 function TeamLine({
   names,
@@ -34,7 +34,7 @@ function TeamLine({
           won ? "font-extrabold text-court" : "font-bold text-ink-muted"
         }`}
       >
-        {score ?? "–"}
+        <PopValue value={score ?? "–"} />
       </span>
     </div>
   );
