@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Worktrees Claude Code
 .claude/worktrees/
+
+# Captures E2E/Playwright (artefacts de test, non versionnés)
+shots/
