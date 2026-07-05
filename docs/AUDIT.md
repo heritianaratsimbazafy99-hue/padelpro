@@ -68,3 +68,21 @@ Chaque point est classé : ✅ corrigé dans cette refonte · 💡 recommandatio
 4. **Confettis** sur le podium en fin d'événement (canvas léger, respectant reduced-motion).
 5. **PWA offline** : cacher le dernier état de l'événement pour les zones sans réseau.
 6. **Swipe entre rounds** sur mobile (gestes horizontaux sur le sélecteur de rounds).
+
+## 8. Refonte landing V2 — « Club Éditorial » (thème clair)
+
+Direction artistique : papier crème (#f3f0e6), vert court profond (#14351f), lime signature, terracotta ; Space Grotesk (display) + Instrument Serif italique (accents éditoriaux).
+
+- ✅ **ScrollSmoother** (inertie + parallaxe `data-speed`) sur desktop pointeur fin ; scroll natif sur mobile/tactile.
+- ✅ Rideau d'intro CSS pur (2 panneaux), timeline hero SplitText par caractères, surligneur lime animé, badge circulaire tournant, balles flottantes (souris + scroll).
+- ✅ **Deck de cartes empilées** (étapes 01→03) : pins ScrollTrigger + scale/fondu de la carte recouverte.
+- ✅ **Manifeste scrub** : paragraphe géant révélé mot à mot au scroll (section vert court).
+- ✅ **Rail horizontal épinglé** (fonctionnalités) avec barre de progression ; pile verticale en fallback mobile.
+- ✅ Marquees inclinés réactifs à la vitesse de scroll (skew), sens inversés (vert / terracotta).
+- ✅ Podium animé (elastic), classement live en cascade, stickers en parallaxe.
+- ✅ CTA final poster lime avec mot fantôme en parallaxe, footer vert au logotype géant en contour.
+- ✅ Curseur custom point + anneau (desktop uniquement), barre de progression de lecture.
+- ✅ `prefers-reduced-motion` : tout est neutralisé (rideau masqué, aucun pin/scrub, contenu accessible d'emblée).
+
+### Piège corrigé (important pour la suite)
+`template.tsx` : l'animation d'entrée (`animate-page-in`, transform avec `fill: both`) faisait de son div le *containing block* de tous les descendants `position: fixed` (header flottant, wrapper ScrollSmoother) → double défilement et pins hors écran. La classe est désormais retirée en `onAnimationEnd`. Par ailleurs, ScrollSmoother doit être créé **avant** les ScrollTriggers épinglés (composant `GlobalMotion` monté en premier enfant), et les refs React d'un parent ne sont pas encore attachées pendant les effets de ses enfants (d'où un contexte GSAP global, sans scope).

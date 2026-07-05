@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowRight, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowRight } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SplitText } from "gsap/SplitText";
@@ -10,12 +10,31 @@ import { Magnetic } from "./magnetic";
 
 gsap.registerPlugin(ScrollTrigger, SplitText);
 
-/** Carte match live du hero : score qui s'incrémente + tilt 3D au survol. */
+/* ------------------------------------------------------------------------ */
+/* Carte match live — papier clair, tilt 3D, score qui vit                   */
+/* ------------------------------------------------------------------------ */
+
+function ScoreRow({ team, pts, lead }: { team: string; pts: number; lead: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className={`text-sm font-semibold ${lead ? "text-ink" : "text-ink-muted"}`}>
+        {team}
+      </span>
+      <span
+        className={`tnum inline-flex items-center justify-center min-w-11 h-9 rounded-xl text-lg font-extrabold transition-colors ${
+          lead ? "bg-lime text-on-lime" : "bg-surface-2 text-ink-muted"
+        }`}
+      >
+        {pts}
+      </span>
+    </div>
+  );
+}
+
 function LiveMatchCard() {
   const ref = useRef<HTMLDivElement>(null);
   const [score, setScore] = useState({ a: 12, b: 9 });
 
-  // Le score "vit" : il monte doucement puis recommence, comme un vrai match.
   useLayoutEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const id = setInterval(() => {
@@ -36,8 +55,8 @@ function LiveMatchCard() {
     const ry = gsap.quickTo(el, "rotationY", { duration: 0.5, ease: "power3.out" });
     const move = (e: MouseEvent) => {
       const r = el.getBoundingClientRect();
-      ry(((e.clientX - r.left) / r.width - 0.5) * 14);
-      rx(-((e.clientY - r.top) / r.height - 0.5) * 14);
+      ry(((e.clientX - r.left) / r.width - 0.5) * 12);
+      rx(-((e.clientY - r.top) / r.height - 0.5) * 12);
     };
     const leave = () => {
       rx(0);
@@ -54,44 +73,38 @@ function LiveMatchCard() {
   const leadA = score.a >= score.b;
 
   return (
-    <div style={{ perspective: "1000px" }}>
+    <div style={{ perspective: "1100px" }}>
       <div
         ref={ref}
         data-hero-card
-        className="gradient-border rounded-3xl p-5 sm:p-6 text-left shadow-2xl shadow-black/60 backdrop-blur will-change-transform"
+        data-cursor
+        className="relative bg-surface border border-border rounded-[1.75rem] p-5 sm:p-6 shadow-club-lg will-change-transform"
         style={{ transformStyle: "preserve-3d" }}
       >
-        <div className="flex items-center justify-between mb-4" style={{ transform: "translateZ(30px)" }}>
-          <p className="font-extrabold">Americano du vendredi</p>
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-warning">
-            <span className="size-1.5 rounded-full bg-warning animate-pulse-soft" aria-hidden />
+        <div
+          className="flex items-center justify-between mb-4"
+          style={{ transform: "translateZ(30px)" }}
+        >
+          <p className="font-display font-bold">Americano du vendredi</p>
+          <span className="inline-flex items-center gap-1.5 text-[0.7rem] font-bold uppercase tracking-wider text-clay">
+            <span className="size-1.5 rounded-full bg-clay animate-pulse-soft" aria-hidden />
             Round 3/7
           </span>
         </div>
         <div
-          className="bg-surface-2/80 border border-border rounded-2xl p-4 mb-3"
+          className="space-y-3 bg-background/70 border border-border rounded-2xl p-4 mb-4"
           style={{ transform: "translateZ(45px)" }}
         >
-          <div className="flex items-center justify-between text-sm font-semibold mb-2.5">
-            <span className={leadA ? "" : "text-ink-muted"}>Léa &amp; Marco</span>
-            <span className={`tnum text-xl font-extrabold ${leadA ? "text-lime" : "text-ink-muted"}`}>
-              {score.a}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-sm font-semibold">
-            <span className={leadA ? "text-ink-muted" : ""}>Sofia &amp; Karim</span>
-            <span className={`tnum text-xl font-extrabold ${leadA ? "text-ink-muted" : "text-lime"}`}>
-              {score.b}
-            </span>
-          </div>
+          <ScoreRow team="Léa & Marco" pts={score.a} lead={leadA} />
+          <ScoreRow team="Sofia & Karim" pts={score.b} lead={!leadA} />
         </div>
         <div
           className="flex items-center justify-between text-xs text-ink-faint px-1"
           style={{ transform: "translateZ(30px)" }}
         >
           <span>Terrain 1 · 24 pts</span>
-          <span className="inline-flex items-center gap-1.5 text-lime font-semibold">
-            <span className="size-1.5 rounded-full bg-lime animate-pulse-soft" aria-hidden />
+          <span className="inline-flex items-center gap-1.5 font-bold text-court">
+            <span className="size-1.5 rounded-full bg-court animate-pulse-soft" aria-hidden />
             Live
           </span>
         </div>
@@ -99,6 +112,35 @@ function LiveMatchCard() {
     </div>
   );
 }
+
+/* ------------------------------------------------------------------------ */
+/* Badge circulaire tournant « scanne · joue · gagne »                       */
+/* ------------------------------------------------------------------------ */
+
+function SpinBadge({ className = "" }: { className?: string }) {
+  return (
+    <div className={`relative size-28 sm:size-32 ${className}`} aria-hidden>
+      <svg viewBox="0 0 100 100" className="absolute inset-0 animate-spin-slow">
+        <defs>
+          <path id="circ" d="M 50,50 m -38,0 a 38,38 0 1,1 76,0 a 38,38 0 1,1 -76,0" />
+        </defs>
+        <text
+          className="fill-court"
+          style={{ fontSize: "10.5px", fontWeight: 700, letterSpacing: "0.22em" }}
+        >
+          <textPath href="#circ">SCANNE · JOUE · GAGNE · REJOUE ·</textPath>
+        </text>
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="size-11 rounded-full ball-lime" />
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------------ */
+/* Hero                                                                      */
+/* ------------------------------------------------------------------------ */
 
 export function Hero() {
   const scope = useRef<HTMLElement>(null);
@@ -108,48 +150,63 @@ export function Hero() {
       const mm = gsap.matchMedia();
 
       mm.add("(prefers-reduced-motion: no-preference)", () => {
-        // --- Timeline d'intro ---
-        // Split par lignes avec masque : préserve le <span> dégradé intact
-        // (un split par mots casserait le background-clip: text).
-        const split = new SplitText("[data-hero-title]", { type: "lines", mask: "lines" });
-        const tl = gsap.timeline({ defaults: { ease: "power4.out" } });
+        /* --- Timeline d'intro (après le rideau) --- */
+        const lines = gsap.utils.toArray<HTMLElement>("[data-hero-line]");
+        const splits = lines.map((l) => new SplitText(l, { type: "chars", mask: "chars" }));
+        const tl = gsap.timeline({ delay: 0.55, defaults: { ease: "power4.out" } });
 
-        tl.from("[data-hero-badge]", { y: 24, autoAlpha: 0, duration: 0.7 })
+        tl.from("[data-hero-badge]", { y: 24, autoAlpha: 0, duration: 0.7 });
+        splits.forEach((split, i) => {
+          tl.from(
+            split.chars,
+            { yPercent: 120, rotation: 4, duration: 0.9, stagger: 0.022 },
+            i === 0 ? "-=0.35" : "-=0.75",
+          );
+        });
+        tl.to("[data-marker]", { scaleX: 1, duration: 0.6, ease: "power3.inOut" }, "-=0.5")
+          .from("[data-hero-sub]", { y: 26, autoAlpha: 0, duration: 0.8 }, "-=0.45")
           .from(
-            split.lines,
-            { yPercent: 115, rotation: 2, duration: 1.1, stagger: 0.12 },
-            "-=0.35",
+            "[data-hero-cta] > *",
+            { y: 24, autoAlpha: 0, duration: 0.7, stagger: 0.1 },
+            "-=0.55",
           )
-          .from("[data-hero-sub]", { y: 26, autoAlpha: 0, duration: 0.8 }, "-=0.55")
-          .from("[data-hero-cta] > *", { y: 24, autoAlpha: 0, duration: 0.7, stagger: 0.1 }, "-=0.5")
-          .from("[data-hero-card]", { y: 60, autoAlpha: 0, scale: 0.92, duration: 1, ease: "expo.out" }, "-=0.45")
-          .from("[data-hero-scroll]", { autoAlpha: 0, duration: 0.6 }, "-=0.3")
-          .from("[data-hero-orb]", { scale: 0, autoAlpha: 0, duration: 1.2, ease: "expo.out", stagger: 0.15 }, 0.4);
+          .from(
+            "[data-hero-card-wrap]",
+            { y: 70, autoAlpha: 0, rotation: 6, duration: 1.1, ease: "expo.out" },
+            "-=0.8",
+          )
+          .from(
+            "[data-hero-spin]",
+            { scale: 0, autoAlpha: 0, duration: 0.8, ease: "back.out(1.6)" },
+            "-=0.7",
+          )
+          .from("[data-hero-scroll]", { autoAlpha: 0, duration: 0.6 }, "-=0.3");
 
-        // --- Balle flottante en boucle ---
+        /* --- Balles flottantes en boucle --- */
         gsap.to("[data-hero-ball]", {
-          y: -22,
-          rotation: 18,
-          duration: 2.6,
+          y: -24,
+          rotation: 20,
+          duration: 2.8,
           ease: "sine.inOut",
           yoyo: true,
           repeat: -1,
+          stagger: 0.5,
         });
 
-        // --- Léger départ du contenu au scroll ---
+        /* --- Départ du hero au scroll (scrub) --- */
         gsap.to("[data-hero-inner]", {
-          yPercent: -8,
-          autoAlpha: 0.25,
+          yPercent: -10,
+          autoAlpha: 0.15,
           ease: "none",
           scrollTrigger: {
             trigger: scope.current,
-            start: "bottom 85%",
-            end: "bottom 30%",
+            start: "bottom 90%",
+            end: "bottom 35%",
             scrub: true,
           },
         });
 
-        // --- Parallaxe souris sur les couches décoratives ---
+        /* --- Parallaxe souris des couches décoratives --- */
         if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
           const layers = gsap.utils.toArray<HTMLElement>("[data-parallax]");
           const setters = layers.map((el) => ({
@@ -177,117 +234,108 @@ export function Hero() {
   return (
     <section
       ref={scope}
-      className="relative min-h-[100svh] flex flex-col overflow-hidden glow-scene noise"
+      className="relative min-h-[100svh] flex flex-col overflow-hidden court-lines-light"
     >
-      {/* Sol de terrain en perspective */}
+      {/* Voile radial chaud en haut */}
       <div
         aria-hidden
-        className="absolute inset-x-0 bottom-0 h-[46%] [transform:perspective(700px)_rotateX(58deg)] origin-bottom court-grid opacity-80"
+        className="absolute inset-0 pointer-events-none"
         style={{
-          maskImage: "linear-gradient(to top, rgba(0,0,0,0.9), transparent)",
-          WebkitMaskImage: "linear-gradient(to top, rgba(0,0,0,0.9), transparent)",
+          background:
+            "radial-gradient(ellipse 90% 55% at 50% -12%, rgba(200,245,66,0.35), transparent 65%), radial-gradient(ellipse 45% 35% at 90% 20%, rgba(232,88,47,0.12), transparent 70%)",
         }}
       />
-      {/* Ligne de fond de court */}
+      {/* Fondu du quadrillage vers le bas */}
       <div
         aria-hidden
-        className="absolute inset-x-[12%] bottom-[13%] h-px bg-gradient-to-r from-transparent via-lime/40 to-transparent"
+        className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-background to-transparent pointer-events-none"
       />
 
-      {/* Orbes lumineux */}
+      {/* Balles décoratives — parallaxe souris + parallaxe scroll (data-speed) */}
       <div
         aria-hidden
-        data-hero-orb
-        data-parallax="26"
-        className="absolute -top-24 left-1/2 -translate-x-1/2 size-[34rem] rounded-full bg-lime/10 blur-[110px] pointer-events-none"
-      />
-      <div
-        aria-hidden
-        data-hero-orb
-        data-parallax="40"
-        className="absolute top-1/3 -right-24 size-72 rounded-full bg-info/10 blur-[90px] pointer-events-none"
-      />
-
-      {/* Balle de padel flottante */}
-      <div
-        aria-hidden
-        data-parallax="55"
-        className="absolute right-[8%] top-[16%] sm:right-[14%] sm:top-[20%] pointer-events-none"
+        data-parallax="46"
+        data-speed="0.85"
+        className="absolute right-[6%] top-[15%] sm:right-[10%] pointer-events-none"
       >
-        <div
-          data-hero-ball
-          className="size-10 sm:size-14 rounded-full shadow-[0_0_50px_rgba(200,245,66,0.45)]"
-          style={{
-            background:
-              "radial-gradient(circle at 32% 30%, #eaff8a 0%, #c8f542 45%, #7fa317 100%)",
-          }}
-        >
-          <div className="size-full rounded-full border-2 border-black/10 [border-radius:50%]" />
-        </div>
+        <div data-hero-ball className="size-12 sm:size-16 rounded-full ball-lime" />
       </div>
-      {/* Petite balle secondaire */}
       <div
         aria-hidden
-        data-parallax="32"
-        className="absolute left-[6%] bottom-[30%] hidden sm:block pointer-events-none"
+        data-parallax="28"
+        data-speed="1.1"
+        className="absolute left-[5%] top-[30%] hidden sm:block pointer-events-none"
       >
-        <div
-          data-hero-ball
-          className="size-6 rounded-full opacity-60 shadow-[0_0_30px_rgba(200,245,66,0.3)]"
-          style={{
-            background:
-              "radial-gradient(circle at 32% 30%, #eaff8a 0%, #c8f542 45%, #7fa317 100%)",
-          }}
-        />
+        <div data-hero-ball className="size-8 rounded-full ball-clay opacity-90" />
+      </div>
+      <div
+        aria-hidden
+        data-parallax="60"
+        data-speed="0.75"
+        className="absolute left-[16%] bottom-[14%] hidden lg:block pointer-events-none"
+      >
+        <div data-hero-ball className="size-6 rounded-full ball-lime opacity-70" />
       </div>
 
       {/* Contenu */}
       <div
         data-hero-inner
-        className="relative mx-auto w-full max-w-6xl px-4 flex-1 flex flex-col lg:flex-row items-center justify-center gap-12 lg:gap-16 pt-28 pb-20"
+        className="relative mx-auto w-full max-w-6xl px-4 flex-1 flex flex-col lg:flex-row lg:items-center gap-10 lg:gap-6 pt-32 pb-16"
       >
-        <div className="flex-1 text-center lg:text-left max-w-2xl">
+        <div className="flex-1 min-w-0">
           <div
             data-hero-badge
-            className="inline-flex items-center gap-2 bg-surface/70 backdrop-blur border border-border rounded-full px-4 py-1.5 mb-7 text-xs font-semibold text-ink-muted"
+            className="inline-flex items-center gap-2 bg-surface border border-border rounded-full pl-2 pr-4 py-1.5 mb-8 text-xs font-semibold text-ink-muted shadow-club"
           >
-            <Sparkles className="size-3.5 text-lime" aria-hidden />
-            Scores en temps réel, sur tous les téléphones
+            <span className="inline-flex items-center gap-1.5 bg-court text-cream rounded-full px-2.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider">
+              <span className="size-1 rounded-full bg-lime animate-pulse-soft" aria-hidden />
+              Live
+            </span>
+            Scores en temps réel sur tous les téléphones
           </div>
 
-          <h1
-            data-hero-title
-            className="font-display text-[clamp(2.6rem,7vw,5.2rem)] font-bold tracking-tight leading-[1.02] mb-6"
-          >
-            Tes americanos de padel,{" "}
-            <span className="text-gradient">sans prise de tête.</span>
+          <h1 className="font-display font-bold uppercase tracking-tight leading-[0.92] text-[clamp(3.2rem,11vw,8rem)] mb-7">
+            <span data-hero-line className="block">
+              Organise.
+            </span>
+            <span data-hero-line className="block text-outline">
+              Scanne.
+            </span>
+            <span data-hero-line className="block normal-case">
+              <span className="marker font-serif-display italic font-normal pr-2">
+                <span data-marker aria-hidden />
+                Joue.
+              </span>
+            </span>
           </h1>
 
           <p
             data-hero-sub
-            className="text-ink-muted text-lg sm:text-xl max-w-xl mx-auto lg:mx-0 mb-9 leading-relaxed"
+            className="text-ink-muted text-lg sm:text-xl max-w-xl mb-9 leading-relaxed"
           >
-            Rotations équitables, équipes équilibrées, QR code pour les joueurs, classement live.
-            Organiser un tournoi prend <strong className="text-ink font-semibold">60 secondes</strong>.
+            Americanos, mexicanos et tournois de padel — rotations équitables, scores en
+            direct, classement Elo. Prêt en{" "}
+            <strong className="text-ink font-semibold">60 secondes</strong>, sans
+            installation.
           </p>
 
-          <div
-            data-hero-cta
-            className="flex flex-col sm:flex-row items-center lg:justify-start justify-center gap-3"
-          >
+          <div data-hero-cta className="flex flex-col sm:flex-row items-center gap-3">
             <Magnetic className="w-full sm:w-auto">
               <Link
                 href="/signup"
-                className="btn-shine group h-14 px-8 inline-flex items-center justify-center gap-2 rounded-2xl bg-lime text-on-lime text-base font-bold hover:bg-lime-deep transition-colors glow-lime w-full sm:w-auto"
+                className="btn-shine group h-14 px-8 inline-flex items-center justify-center gap-2 rounded-full bg-court text-cream text-base font-bold hover:bg-court-2 transition-colors shadow-club-lg w-full sm:w-auto"
               >
-                Organiser ma première partie
-                <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" aria-hidden />
+                Lancer mon premier americano
+                <ArrowRight
+                  className="size-5 transition-transform group-hover:translate-x-1"
+                  aria-hidden
+                />
               </Link>
             </Magnetic>
             <Magnetic className="w-full sm:w-auto">
               <Link
                 href="/login"
-                className="h-14 px-8 inline-flex items-center justify-center rounded-2xl border border-border-strong bg-surface/50 backdrop-blur text-base font-semibold hover:border-lime hover:text-lime transition-colors w-full sm:w-auto"
+                className="h-14 px-8 inline-flex items-center justify-center rounded-full border border-border-strong bg-surface/70 text-base font-semibold hover:border-court hover:text-court transition-colors w-full sm:w-auto"
               >
                 J&apos;ai déjà un compte
               </Link>
@@ -295,20 +343,26 @@ export function Hero() {
           </div>
         </div>
 
-        {/* Carte match live */}
-        <div className="w-full max-w-sm shrink-0" data-parallax="-14">
-          <LiveMatchCard />
+        {/* Carte match + badge tournant */}
+        <div
+          className="relative w-full max-w-sm mx-auto lg:mx-0 shrink-0 lg:-rotate-2"
+          data-speed="0.92"
+        >
+          <div data-hero-card-wrap>
+            <LiveMatchCard />
+          </div>
+          <div data-hero-spin className="absolute -top-14 -right-4 sm:-right-10">
+            <SpinBadge />
+          </div>
         </div>
       </div>
 
       {/* Indice de scroll */}
-      <div
-        data-hero-scroll
-        className="relative pb-8 flex justify-center"
-        aria-hidden
-      >
+      <div data-hero-scroll className="relative pb-8 flex justify-center" aria-hidden>
         <div className="flex flex-col items-center gap-2 text-ink-faint">
-          <span className="text-[0.625rem] font-bold uppercase tracking-[0.2em]">Découvrir</span>
+          <span className="text-[0.625rem] font-bold uppercase tracking-[0.2em]">
+            Découvrir
+          </span>
           <ArrowDown className="size-4 animate-float" />
         </div>
       </div>
