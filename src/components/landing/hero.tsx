@@ -1,145 +1,18 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowRight } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SplitText } from "gsap/SplitText";
 import { Magnetic } from "./magnetic";
+import { CourtScene } from "./court-scene";
 
 gsap.registerPlugin(ScrollTrigger, SplitText);
 
 /* ------------------------------------------------------------------------ */
-/* Carte match live — papier clair, tilt 3D, score qui vit                   */
-/* ------------------------------------------------------------------------ */
-
-function ScoreRow({ team, pts, lead }: { team: string; pts: number; lead: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className={`text-sm font-semibold ${lead ? "text-ink" : "text-ink-muted"}`}>
-        {team}
-      </span>
-      <span
-        className={`tnum inline-flex items-center justify-center min-w-11 h-9 rounded-xl text-lg font-extrabold transition-colors ${
-          lead ? "bg-lime text-on-lime" : "bg-surface-2 text-ink-muted"
-        }`}
-      >
-        {pts}
-      </span>
-    </div>
-  );
-}
-
-function LiveMatchCard() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [score, setScore] = useState({ a: 12, b: 9 });
-
-  useLayoutEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const id = setInterval(() => {
-      setScore((s) => {
-        if (s.a + s.b >= 24) return { a: 8, b: 7 };
-        return Math.random() > 0.45 ? { ...s, a: s.a + 1 } : { ...s, b: s.b + 1 };
-      });
-    }, 2600);
-    return () => clearInterval(id);
-  }, []);
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
-
-    const rx = gsap.quickTo(el, "rotationX", { duration: 0.5, ease: "power3.out" });
-    const ry = gsap.quickTo(el, "rotationY", { duration: 0.5, ease: "power3.out" });
-    const move = (e: MouseEvent) => {
-      const r = el.getBoundingClientRect();
-      ry(((e.clientX - r.left) / r.width - 0.5) * 12);
-      rx(-((e.clientY - r.top) / r.height - 0.5) * 12);
-    };
-    const leave = () => {
-      rx(0);
-      ry(0);
-    };
-    el.addEventListener("mousemove", move);
-    el.addEventListener("mouseleave", leave);
-    return () => {
-      el.removeEventListener("mousemove", move);
-      el.removeEventListener("mouseleave", leave);
-    };
-  }, []);
-
-  const leadA = score.a >= score.b;
-
-  return (
-    <div style={{ perspective: "1100px" }}>
-      <div
-        ref={ref}
-        data-hero-card
-        data-cursor
-        className="relative bg-surface border border-border rounded-[1.75rem] p-5 sm:p-6 shadow-club-lg will-change-transform"
-        style={{ transformStyle: "preserve-3d" }}
-      >
-        <div
-          className="flex items-center justify-between mb-4"
-          style={{ transform: "translateZ(30px)" }}
-        >
-          <p className="font-display font-bold">Americano du vendredi</p>
-          <span className="inline-flex items-center gap-1.5 text-[0.7rem] font-bold uppercase tracking-wider text-clay">
-            <span className="size-1.5 rounded-full bg-clay animate-pulse-soft" aria-hidden />
-            Round 3/7
-          </span>
-        </div>
-        <div
-          className="space-y-3 bg-background/70 border border-border rounded-2xl p-4 mb-4"
-          style={{ transform: "translateZ(45px)" }}
-        >
-          <ScoreRow team="Léa & Marco" pts={score.a} lead={leadA} />
-          <ScoreRow team="Sofia & Karim" pts={score.b} lead={!leadA} />
-        </div>
-        <div
-          className="flex items-center justify-between text-xs text-ink-faint px-1"
-          style={{ transform: "translateZ(30px)" }}
-        >
-          <span>Terrain 1 · 24 pts</span>
-          <span className="inline-flex items-center gap-1.5 font-bold text-court">
-            <span className="size-1.5 rounded-full bg-court animate-pulse-soft" aria-hidden />
-            Live
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------------ */
-/* Badge circulaire tournant « scanne · joue · gagne »                       */
-/* ------------------------------------------------------------------------ */
-
-function SpinBadge({ className = "" }: { className?: string }) {
-  return (
-    <div className={`relative size-28 sm:size-32 ${className}`} aria-hidden>
-      <svg viewBox="0 0 100 100" className="absolute inset-0 animate-spin-slow">
-        <defs>
-          <path id="circ" d="M 50,50 m -38,0 a 38,38 0 1,1 76,0 a 38,38 0 1,1 -76,0" />
-        </defs>
-        <text
-          className="fill-court"
-          style={{ fontSize: "10.5px", fontWeight: 700, letterSpacing: "0.22em" }}
-        >
-          <textPath href="#circ">SCANNE · JOUE · GAGNE · REJOUE ·</textPath>
-        </text>
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="size-11 rounded-full ball-lime" />
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------------ */
-/* Hero                                                                      */
+/* Hero — le terrain vivant (CourtScene) occupe la place d'honneur à droite  */
 /* ------------------------------------------------------------------------ */
 
 export function Hero() {
@@ -172,13 +45,13 @@ export function Hero() {
           )
           .from(
             "[data-hero-card-wrap]",
-            { y: 70, autoAlpha: 0, rotation: 6, duration: 1.1, ease: "expo.out" },
+            { y: 80, autoAlpha: 0, rotation: 3, duration: 1.1, ease: "expo.out" },
             "-=0.8",
           )
           .from(
-            "[data-hero-spin]",
-            { scale: 0, autoAlpha: 0, duration: 0.8, ease: "back.out(1.6)" },
-            "-=0.7",
+            "[data-scene-chip]",
+            { scale: 0.5, autoAlpha: 0, duration: 0.7, ease: "back.out(1.8)", stagger: 0.12 },
+            "-=0.6",
           )
           .from("[data-hero-scroll]", { autoAlpha: 0, duration: 0.6 }, "-=0.3");
 
@@ -343,16 +216,10 @@ export function Hero() {
           </div>
         </div>
 
-        {/* Carte match + badge tournant */}
-        <div
-          className="relative w-full max-w-sm mx-auto lg:mx-0 shrink-0 lg:-rotate-2"
-          data-speed="0.92"
-        >
+        {/* Le terrain vivant : un americano qui se joue sous nos yeux */}
+        <div className="relative w-full max-w-md mx-auto lg:mx-0 shrink-0 lg:w-[27rem]" data-speed="0.92">
           <div data-hero-card-wrap>
-            <LiveMatchCard />
-          </div>
-          <div data-hero-spin className="absolute -top-14 -right-4 sm:-right-10">
-            <SpinBadge />
+            <CourtScene />
           </div>
         </div>
       </div>
