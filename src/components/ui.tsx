@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { Loader2 } from "lucide-react";
 
 function cx(...parts: Array<string | false | null | undefined>) {
@@ -101,6 +101,21 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   ),
 );
 Input.displayName = "Input";
+
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  ({ className, ...props }, ref) => (
+    <textarea
+      ref={ref}
+      className={cx(
+        "w-full min-h-24 px-4 py-3 rounded-(--radius-field) bg-surface-2 border border-border text-ink placeholder:text-ink-faint resize-y",
+        "transition-colors duration-150 focus:outline-none focus:border-lime/60 focus:ring-2 focus:ring-lime/15",
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+Textarea.displayName = "Textarea";
 
 export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
   ({ className, children, ...props }, ref) => (

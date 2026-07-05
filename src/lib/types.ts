@@ -3,9 +3,15 @@ export type EventStatus = "draft" | "active" | "completed";
 export type MatchStatus = "pending" | "done";
 export type PairingMode = "random" | "balanced";
 
+/** Côté de jeu préféré sur le terrain. */
+export type PreferredSide = "left" | "right" | "both";
+
 export interface Profile {
   id: string;
   display_name: string;
+  preferred_side: PreferredSide | null;
+  racket: string | null;
+  bio: string | null;
   created_at: string;
 }
 
