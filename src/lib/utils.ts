@@ -1,9 +1,15 @@
-import type { EventFormat, EventStatus } from "./types";
+import type { EventFormat, EventStatus, PreferredSide } from "./types";
 
 export const FORMAT_LABELS: Record<EventFormat, string> = {
   americano: "Americano",
   mexicano: "Mexicano",
   tournament: "Tournoi",
+};
+
+export const SIDE_LABELS: Record<PreferredSide, string> = {
+  left: "Côté gauche",
+  right: "Côté droit",
+  both: "Les deux côtés",
 };
 
 export const STATUS_LABELS: Record<EventStatus, string> = {

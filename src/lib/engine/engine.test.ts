@@ -5,6 +5,7 @@ import {
   generateMexicanoRound,
   auditSchedule,
   historyFromRounds,
+  sideConflict,
   type EnginePlayer,
   type PlannedRound,
 } from "./americano.ts";
@@ -184,6 +185,70 @@ test("composeTeams équilibré : le plus fort joue avec le plus faible", () => {
   assert.equal(teams.length, 2);
   const teamOfA = teams.find((t) => t.p1 === "a" || t.p2 === "a")!;
   assert.ok(teamOfA.p1 === "d" || teamOfA.p2 === "d", "le niveau 10 est avec le niveau 1");
+});
+
+test("sideConflict : seules deux préférences strictes identiques posent problème", () => {
+  assert.equal(sideConflict("left", "left"), true);
+  assert.equal(sideConflict("right", "right"), true);
+  assert.equal(sideConflict("left", "right"), false);
+  assert.equal(sideConflict("both", "both"), false);
+  assert.equal(sideConflict("left", "both"), false);
+  assert.equal(sideConflict(null, "left"), false);
+  assert.equal(sideConflict(undefined, undefined), false);
+});
+
+test("mode équilibré : jamais deux gauchers stricts en équipe quand une alternative existe", () => {
+  // 4 gauchers stricts + 4 droitiers stricts, niveaux homogènes :
+  // chaque équipe doit mélanger un gauche et un droit.
+  const players: EnginePlayer[] = [
+    { id: "g1", level: 5, side: "left" },
+    { id: "g2", level: 5, side: "left" },
+    { id: "g3", level: 5, side: "left" },
+    { id: "g4", level: 5, side: "left" },
+    { id: "d1", level: 5, side: "right" },
+    { id: "d2", level: 5, side: "right" },
+    { id: "d3", level: 5, side: "right" },
+    { id: "d4", level: 5, side: "right" },
+  ];
+  const sideOf = new Map(players.map((p) => [p.id, p.side]));
+  const schedule = generateAmericanoSchedule(players, 3, 2, "balanced");
+  assertRoundIntegrity(players, schedule, 2);
+  let conflicts = 0;
+  for (const round of schedule) {
+    for (const m of round.matches) {
+      if (sideConflict(sideOf.get(m.team1[0]), sideOf.get(m.team1[1]))) conflicts++;
+      if (sideConflict(sideOf.get(m.team2[0]), sideOf.get(m.team2[1]))) conflicts++;
+    }
+  }
+  // 3 rounds × 2 matchs : la rotation parfaite gauche/droite existe (4×4).
+  assert.equal(conflicts, 0, `${conflicts} équipes en conflit de côté`);
+});
+
+test("mode équilibré : le côté ne casse pas la rotation des partenaires", () => {
+  const players: EnginePlayer[] = makePlayers(8).map((p, i) => ({
+    ...p,
+    side: i % 2 === 0 ? "left" : "right",
+  }));
+  const schedule = generateAmericanoSchedule(players, 7, 2, "balanced");
+  assertRoundIntegrity(players, schedule, 2);
+  const audit = auditSchedule(players, schedule);
+  // La rotation reste prioritaire sur l'évitement de conflit de côté.
+  assert.ok(audit.maxPartnerCount <= 2, "le côté ne doit pas dominer la rotation");
+});
+
+test("composeTeams équilibré : évite gauche/gauche quand un partenaire compatible existe", () => {
+  const players = [
+    { id: "a", level: 10, side: "left" as const },
+    { id: "b", level: 8, side: "right" as const },
+    { id: "c", level: 4, side: "both" as const },
+    { id: "d", level: 1, side: "left" as const },
+  ];
+  const teams = composeTeams(players, "balanced");
+  for (const t of teams) {
+    const sa = players.find((p) => p.id === t.p1)!.side;
+    const sb = players.find((p) => p.id === t.p2)!.side;
+    assert.ok(!(sa !== "both" && sa === sb), `équipe ${t.p1}/${t.p2} en conflit de côté`);
+  }
 });
 
 test("stress : 20 joueurs / 4 terrains / 10 rounds reste intègre et équitable", () => {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ChevronRight, Flame, Plus, QrCode, Target, Trophy } from "lucide-react";
+import { ArrowRight, Camera, ChevronRight, Flame, Plus, QrCode, Target, Trophy, X } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { usePlayerStats } from "@/lib/use-stats";
@@ -20,6 +20,7 @@ export default function DashboardPage() {
   const [displayName, setDisplayName] = useState("");
   const [recent, setRecent] = useState<PadelEvent[] | null>(null);
   const [joinCode, setJoinCode] = useState("");
+  const [photoNudge, setPhotoNudge] = useState(false);
   const stats = usePlayerStats(user?.id ?? null);
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export default function DashboardPage() {
       if (!user) return;
       setUser(user);
       const [{ data: profile }, { data: events }] = await Promise.all([
-        supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+        supabase.from("profiles").select("display_name, avatar_url").eq("id", user.id).maybeSingle(),
         supabase
           .from("events")
           .select("*")
@@ -40,8 +41,15 @@ export default function DashboardPage() {
       ]);
       setDisplayName(profile?.display_name ?? "");
       setRecent((events ?? []) as PadelEvent[]);
+      // Incite à compléter la licence : pas de photo et pas encore écarté.
+      setPhotoNudge(!profile?.avatar_url && localStorage.getItem("padelpro:photo-nudge") !== "off");
     })();
   }, [supabase]);
+
+  function dismissPhotoNudge() {
+    localStorage.setItem("padelpro:photo-nudge", "off");
+    setPhotoNudge(false);
+  }
 
   function joinByCode(e: React.FormEvent) {
     e.preventDefault();
@@ -61,6 +69,37 @@ export default function DashboardPage() {
           </h1>
           <p className="text-ink-muted">Prêt à faire tourner les paires ?</p>
         </section>
+
+        {/* Complète ta licence : photo de profil manquante */}
+        {photoNudge && (
+          <section className="mb-6 animate-fade-up">
+            <div className="relative flex items-center gap-3 bg-surface border border-border rounded-(--radius-card) p-4 shadow-club">
+              <span className="size-11 shrink-0 rounded-full bg-lime/30 border border-lime-deep/40 flex items-center justify-center text-court">
+                <Camera className="size-5" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold leading-tight">Mets un visage sur ta licence</p>
+                <p className="text-xs text-ink-muted mt-0.5">
+                  Ta photo apparaîtra sur le classement et dans les événements.
+                </p>
+              </div>
+              <Link
+                href="/profile"
+                className="shrink-0 h-9 px-3.5 inline-flex items-center rounded-full bg-court text-cream text-xs font-bold hover:bg-court-2 transition-colors"
+              >
+                Ajouter
+              </Link>
+              <button
+                type="button"
+                onClick={dismissPhotoNudge}
+                aria-label="Ne plus afficher"
+                className="absolute -top-2 -right-2 size-6 rounded-full bg-surface-2 border border-border text-ink-faint hover:text-ink flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="size-3.5" aria-hidden />
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* Actions rapides */}
         <section className="grid grid-cols-2 gap-3 mb-6 animate-fade-up [animation-delay:60ms]">

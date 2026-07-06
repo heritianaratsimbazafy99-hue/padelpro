@@ -3,32 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ArrowLeftRight,
-  Camera,
-  Check,
-  Flame,
-  History,
-  Loader2,
-  LogOut,
-  Medal,
-  Percent,
-  Sparkles,
-  Swords,
-  TrendingUp,
-  Trophy,
-  Users,
-  Zap,
-} from "lucide-react";
+import { Check, History, LogOut, Medal, Percent, Swords, TrendingUp, Trophy } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { usePlayerStats } from "@/lib/use-stats";
 import { usePlayerHistory } from "@/lib/use-history";
 import { FORMAT_LABELS, formatDate } from "@/lib/utils";
 import type { PreferredSide } from "@/lib/types";
+import { TROPHIES, earnedTrophyIds, eloTitle } from "@/lib/trophies";
+import { prepareAvatar } from "@/lib/avatar";
+import { shareLicence } from "@/lib/licence-image";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
+import { PlayerCard, TrophyGrid, type EloPoint } from "@/components/player-card";
 import {
-  Avatar,
   Badge,
   Button,
   EmptyState,
@@ -39,22 +26,16 @@ import {
   SkeletonList,
   Textarea,
   Toast,
+  initialsOf,
   type ToastData,
 } from "@/components/ui";
-import { CountUp } from "@/components/motion";
+import { CountUp, Confetti } from "@/components/motion";
 
-const SIDE_LABELS: Record<PreferredSide, string> = {
-  left: "Côté gauche",
-  right: "Côté droit",
-  both: "Les deux côtés",
-};
-
-const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+const AVATAR_MAX_BYTES = 8 * 1024 * 1024;
 
 export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<User | null>(null);
   const [toast, setToast] = useState<ToastData | null>(null);
 
@@ -68,8 +49,16 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [elo, setElo] = useState<number | null>(null);
+  const [eloHistory, setEloHistory] = useState<EloPoint[] | null>(null);
   const [memberSince, setMemberSince] = useState<string | null>(null);
+
+  /* Trophées persistés : id → date de déblocage. null = pas encore chargé. */
+  const [unlockedAt, setUnlockedAt] = useState<Map<string, string> | null>(null);
+  const [celebrating, setCelebrating] = useState(false);
+  const syncingTrophies = useRef(false);
+
   const stats = usePlayerStats(user?.id ?? null);
   const history = usePlayerHistory(user?.id ?? null);
 
@@ -80,14 +69,17 @@ export default function ProfilePage() {
       } = await supabase.auth.getUser();
       if (!user) return;
       setUser(user);
-      const [{ data: profile }, { data: board }] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("display_name, bio, preferred_side, racket, avatar_url, created_at")
-          .eq("id", user.id)
-          .maybeSingle(),
-        supabase.rpc("global_leaderboard"),
-      ]);
+      const [{ data: profile }, { data: board }, { data: hist }, { data: trophies }] =
+        await Promise.all([
+          supabase
+            .from("profiles")
+            .select("display_name, bio, preferred_side, racket, avatar_url, created_at")
+            .eq("id", user.id)
+            .maybeSingle(),
+          supabase.rpc("global_leaderboard"),
+          supabase.rpc("player_elo_history", { p_profile_id: user.id }),
+          supabase.from("profile_trophies").select("trophy_id, unlocked_at").eq("profile_id", user.id),
+        ]);
       setName(profile?.display_name ?? "");
       setBio(profile?.bio ?? "");
       setSide((profile?.preferred_side as PreferredSide | null) ?? "both");
@@ -96,8 +88,49 @@ export default function ProfilePage() {
       setMemberSince(profile?.created_at ?? null);
       const mine = (board ?? []).find((r: { p_id: string }) => r.p_id === user.id);
       setElo(mine ? mine.p_elo : null);
+      setEloHistory(
+        ((hist ?? []) as Array<{ h_elo: number }>).map((h) => ({ elo: h.h_elo })),
+      );
+      setUnlockedAt(
+        new Map(
+          ((trophies ?? []) as Array<{ trophy_id: string; unlocked_at: string }>).map((t) => [
+            t.trophy_id,
+            t.unlocked_at,
+          ]),
+        ),
+      );
     })();
   }, [supabase]);
+
+  /* Persiste les trophées fraîchement mérités et déclenche la célébration. */
+  useEffect(() => {
+    if (!user || !stats || unlockedAt === null || syncingTrophies.current) return;
+    const fresh = earnedTrophyIds(stats, elo).filter((id) => !unlockedAt.has(id));
+    if (fresh.length === 0) return;
+    syncingTrophies.current = true;
+    (async () => {
+      const { error } = await supabase
+        .from("profile_trophies")
+        .insert(fresh.map((id) => ({ profile_id: user.id, trophy_id: id })));
+      if (!error) {
+        const nowIso = new Date().toISOString();
+        setUnlockedAt((prev) => {
+          const next = new Map(prev);
+          fresh.forEach((id) => next.set(id, nowIso));
+          return next;
+        });
+        const labels = TROPHIES.filter((t) => fresh.includes(t.id)).map((t) => t.label);
+        setCelebrating(true);
+        setToast({
+          message:
+            labels.length === 1
+              ? `Trophée débloqué : ${labels[0]} !`
+              : `${labels.length} trophées débloqués !`,
+        });
+      }
+      syncingTrophies.current = false;
+    })();
+  }, [user, stats, elo, unlockedAt, supabase]);
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -121,22 +154,29 @@ export default function ProfilePage() {
     setTimeout(() => setSaved(false), 2000);
   }
 
-  /** Upload de la photo dans le bucket "avatars" (dossier = uid). */
-  async function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !user) return;
+  /** Recadre/compresse la photo puis l'upload dans le bucket "avatars". */
+  async function onPickAvatar(file: File) {
+    if (!user) return;
     if (file.size > AVATAR_MAX_BYTES) {
-      setToast({ message: "Photo trop lourde : 2 Mo maximum.", tone: "danger" });
+      setToast({ message: "Photo trop lourde : 8 Mo maximum.", tone: "danger" });
       return;
     }
     setUploading(true);
-    const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+    let blob: Blob = file;
+    let contentType = file.type;
+    let ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+    try {
+      blob = await prepareAvatar(file);
+      contentType = "image/webp";
+      ext = "webp";
+    } catch {
+      /* navigateur sans createImageBitmap/webp : on envoie l'original */
+    }
     const path = `${user.id}/avatar-${Date.now()}.${ext}`;
     const previous = avatarUrl?.split("/avatars/")[1];
     const { error: uploadError } = await supabase.storage
       .from("avatars")
-      .upload(path, file, { contentType: file.type, upsert: true });
+      .upload(path, blob, { contentType, upsert: true });
     if (uploadError) {
       setUploading(false);
       setToast({ message: "Échec de l'envoi de la photo.", tone: "danger" });
@@ -157,6 +197,31 @@ export default function ProfilePage() {
     setAvatarUrl(publicUrl);
     if (previous) void supabase.storage.from("avatars").remove([previous]);
     setToast({ message: "Photo de profil mise à jour !" });
+  }
+
+  const earned = useMemo(() => new Set(earnedTrophyIds(stats, elo)), [stats, elo]);
+
+  /** Exporte la licence en PNG et la partage (ou la télécharge). */
+  async function onShare() {
+    setSharing(true);
+    try {
+      const result = await shareLicence({
+        name: name || "Joueur",
+        title: eloTitle(elo),
+        elo,
+        avatarUrl,
+        initials: initialsOf(name || "Joueur"),
+        bio: bio.trim() || null,
+        side,
+        racket: racket.trim() || null,
+        memberSince: memberSince ? new Date(memberSince).getFullYear() : null,
+        trophies: { unlocked: earned.size, total: TROPHIES.length },
+      });
+      if (result === "downloaded") setToast({ message: "Licence téléchargée !" });
+    } catch {
+      setToast({ message: "Impossible de générer l'image.", tone: "danger" });
+    }
+    setSharing(false);
   }
 
   async function logout() {
@@ -189,126 +254,36 @@ export default function ProfilePage() {
     { icon: History, label: "Défaites", value: stats?.losses },
   ];
 
-  /* Trophées du club : débloqués par la carrière */
-  const trophies: Array<{
-    icon: typeof Trophy;
-    label: string;
-    hint: string;
-    done: boolean;
-  }> = [
-    { icon: Sparkles, label: "Premiers pas", hint: "Jouer un match", done: (stats?.matches ?? 0) >= 1 },
-    { icon: Trophy, label: "Première victoire", hint: "Gagner un match", done: (stats?.wins ?? 0) >= 1 },
-    { icon: Flame, label: "Habitué du club", hint: "Jouer 10 matchs", done: (stats?.matches ?? 0) >= 10 },
-    { icon: Medal, label: "Serial winner", hint: "Gagner 10 matchs", done: (stats?.wins ?? 0) >= 10 },
-    { icon: Users, label: "Pilier du club", hint: "Participer à 5 événements", done: (stats?.events ?? 0) >= 5 },
-    { icon: TrendingUp, label: "Grimpeur", hint: "Atteindre 1100 Elo", done: (elo ?? 0) >= 1100 },
-  ];
-  const unlockedCount = trophies.filter((t) => t.done).length;
-
   return (
     <>
       <TopBar title="Profil" />
       <AppPage>
-        {/* Carte joueur — licence de club */}
-        <section className="sec-court grain relative overflow-hidden rounded-[1.75rem] border border-border shadow-club-lg mb-7 animate-fade-up">
-          <div className="relative p-5 sm:p-6">
-            <div className="flex items-start gap-4">
-              <div className="relative shrink-0">
-                <Avatar name={name || "Joueur"} src={avatarUrl} size="xl" className="ring-2 ring-lime/60" />
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploading}
-                  aria-label="Changer la photo de profil"
-                  className="absolute -bottom-1 -right-1 size-9 rounded-full bg-lime text-on-lime border-2 border-court flex items-center justify-center cursor-pointer transition-transform hover:scale-110 active:scale-95 disabled:opacity-60"
-                >
-                  {uploading ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  ) : (
-                    <Camera className="size-4" aria-hidden />
-                  )}
-                </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={onPickAvatar}
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-lime mb-1">
-                  Licence PadelPro
-                </p>
-                <h1 className="font-display text-2xl font-bold truncate">{name || "Joueur"}</h1>
-                <p className="text-sm text-ink-muted truncate">{user.email}</p>
-                {memberSince && (
-                  <p className="text-xs text-ink-faint mt-1">
-                    Membre depuis {new Date(memberSince).getFullYear()}
-                  </p>
-                )}
-              </div>
-              <div className="text-right shrink-0">
-                <p className="tnum font-display text-3xl font-bold text-lime">
-                  {elo === null ? "–" : <CountUp value={elo} />}
-                </p>
-                <p className="text-[0.65rem] font-bold uppercase tracking-wider text-ink-faint">Elo</p>
-              </div>
-            </div>
-
-            {bio.trim() && (
-              <p className="font-serif-display italic text-lg leading-snug mt-4 text-ink">
-                « {bio.trim()} »
-              </p>
-            )}
-
-            <div className="flex flex-wrap gap-2 mt-4">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-2 border border-border text-xs font-semibold">
-                <ArrowLeftRight className="size-3.5 text-lime" aria-hidden />
-                {SIDE_LABELS[side]}
-              </span>
-              {racket.trim() && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-2 border border-border text-xs font-semibold">
-                  <Zap className="size-3.5 text-lime" aria-hidden />
-                  {racket.trim()}
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-2 border border-border text-xs font-semibold">
-                <Trophy className="size-3.5 text-lime" aria-hidden />
-                {unlockedCount}/{trophies.length} trophées
-              </span>
-            </div>
-          </div>
-        </section>
+        <div className="mb-7">
+          <PlayerCard
+            name={name}
+            subtitle={user.email}
+            title={eloTitle(elo)}
+            avatarUrl={avatarUrl}
+            elo={elo}
+            memberSince={memberSince}
+            bio={bio}
+            side={side}
+            racket={racket}
+            trophies={{ unlocked: earned.size, total: TROPHIES.length }}
+            eloHistory={eloHistory}
+            onPickAvatar={onPickAvatar}
+            uploading={uploading}
+            onShare={onShare}
+            sharing={sharing}
+          />
+        </div>
 
         {/* Trophées */}
         <section className="mb-7">
           <h2 className="text-sm font-extrabold uppercase tracking-wider text-clay mb-3">
             Trophées du club
           </h2>
-          <div className="grid grid-cols-3 gap-3">
-            {trophies.map(({ icon: Icon, label, hint, done }, i) => (
-              <div
-                key={label}
-                className={`stagger-i rounded-(--radius-card) border p-3 flex flex-col items-center text-center gap-1.5 transition-colors ${
-                  done
-                    ? "bg-lime/25 border-lime-deep/50"
-                    : "bg-surface border-border opacity-60 grayscale"
-                }`}
-                style={{ "--i": i } as React.CSSProperties}
-              >
-                <span
-                  className={`size-10 rounded-full flex items-center justify-center ${
-                    done ? "bg-lime text-on-lime" : "bg-surface-2 text-ink-faint"
-                  }`}
-                >
-                  <Icon className="size-5" aria-hidden />
-                </span>
-                <p className="text-xs font-bold leading-tight">{label}</p>
-                <p className="text-[0.65rem] text-ink-faint leading-tight">{hint}</p>
-              </div>
-            ))}
-          </div>
+          <TrophyGrid earned={earned} unlockedAt={unlockedAt ?? undefined} />
         </section>
 
         <section className="mb-7">
@@ -459,6 +434,7 @@ export default function ProfilePage() {
           Se déconnecter
         </Button>
       </AppPage>
+      {celebrating && <Confetti />}
       {toast && <Toast toast={toast} onDone={() => setToast(null)} />}
       <BottomNav />
     </>

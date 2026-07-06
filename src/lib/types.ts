@@ -52,6 +52,8 @@ export interface EventPlayer {
   profile_id: string | null;
   level: number; // 1-10 self/organizer assessed level, used for balanced pairing
   seed: number; // tournament seeding order
+  /** Copié du profil au claim ; utilisé par l'appariement équilibré. */
+  preferred_side: PreferredSide | null;
   created_at: string;
 }
 

@@ -17,7 +17,7 @@ import crypto from "node:crypto";
 const PORT = Number(process.argv[2] || 4545);
 
 /* ------------------------------------------------------------------ store */
-const db = { profiles: [], events: [], event_players: [], matches: [] };
+const db = { profiles: [], events: [], event_players: [], matches: [], profile_trophies: [] };
 const users = []; // {id, email, password, user_metadata}
 const sessions = new Map(); // access_token -> user id
 
@@ -150,6 +150,10 @@ function withDefaults(table, row, user) {
     base.level ??= 5;
     base.seed ??= 0;
     base.profile_id ??= null;
+    base.preferred_side ??= null;
+  }
+  if (table === "profile_trophies") {
+    base.unlocked_at ??= now();
   }
   if (table === "matches") {
     base.score1 ??= null;
@@ -209,6 +213,9 @@ function rpcClaimPlayer(p, user) {
   if (!player || !event || event.share_code !== String(p.p_share_code || "").toUpperCase())
     throw pgError("player_or_code_invalid");
   player.profile_id = user.id;
+  // Réplique SQL : copie du côté préféré depuis le profil au claim.
+  const profile = db.profiles.find((pr) => pr.id === user.id);
+  player.preferred_side = profile?.preferred_side ?? player.preferred_side ?? null;
 }
 
 function rpcGlobalLeaderboard() {
@@ -267,6 +274,49 @@ function rpcGlobalLeaderboard() {
       };
     })
     .sort((a, b) => b.p_elo - a.p_elo);
+}
+
+/* Réplique de player_elo_history : même Elo que le leaderboard, mais émet
+   un point après chaque match du joueur demandé. */
+function rpcPlayerEloHistory(p) {
+  const target = p.p_profile_id;
+  const ratings = new Map();
+  for (const pl of db.event_players.filter((x) => x.profile_id)) {
+    if (!ratings.has(pl.profile_id)) ratings.set(pl.profile_id, 1000);
+  }
+  const playerProfile = new Map(db.event_players.map((x) => [x.id, x.profile_id]));
+  const ratingOf = (pid) =>
+    pid && playerProfile.get(pid) ? ratings.get(playerProfile.get(pid)) : 1000;
+
+  const out = [];
+  const done = db.matches
+    .filter((m) => m.status === "done")
+    .sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+  for (const m of done) {
+    const t1 = [m.team1_p1, m.team1_p2].filter(Boolean);
+    const t2 = [m.team2_p1, m.team2_p2].filter(Boolean);
+    if (!t1.length || !t2.length) continue;
+    const r1 = t1.reduce((s, x) => s + ratingOf(x), 0) / t1.length;
+    const r2 = t2.reduce((s, x) => s + ratingOf(x), 0) / t2.length;
+    const e1 = 1 / (1 + 10 ** ((r2 - r1) / 400));
+    const s1 = m.score1 > m.score2 ? 1 : m.score1 < m.score2 ? 0 : 0.5;
+    let involved = false;
+    for (const [team, exp, score] of [
+      [t1, e1, s1],
+      [t2, 1 - e1, 1 - s1],
+    ]) {
+      for (const pid of team) {
+        const prof = playerProfile.get(pid);
+        if (!prof || !ratings.has(prof)) continue;
+        ratings.set(prof, ratings.get(prof) + 32 * (score - exp));
+        if (prof === target) involved = true;
+      }
+    }
+    if (involved) {
+      out.push({ h_idx: out.length + 1, h_elo: Math.round(ratings.get(target)), h_played_at: m.created_at });
+    }
+  }
+  return out;
 }
 
 const pgError = (msg) => Object.assign(new Error(msg), { pg: true });
@@ -370,6 +420,7 @@ const server = http.createServer(async (req, res) => {
         return send(res, 204);
       }
       if (fn === "global_leaderboard") return send(res, 200, rpcGlobalLeaderboard());
+      if (fn === "player_elo_history") return send(res, 200, rpcPlayerEloHistory(params));
       return send(res, 404, { message: `function ${fn} not found` });
     } catch (e) {
       return send(res, 400, { code: "P0001", message: e.message, details: null, hint: null });

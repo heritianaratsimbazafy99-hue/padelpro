@@ -259,9 +259,13 @@ await check("le classement global Elo affiche le joueur réclamé", async () => 
 });
 
 /* 9. Profil ---------------------------------------------------------------- */
-await check("le profil affiche stats et historique", async () => {
+await check("le profil affiche stats, trophées débloqués et sparkline Elo", async () => {
   await page.goto(BASE + "/profile", { waitUntil: "networkidle" });
   await expectVisible(page.getByText("Tsiresy R."));
+  // Trophées persistés à la première visite (date de déblocage affichée)
+  await expectVisible(page.getByText(/Débloqué le/).first(), 10000);
+  // Sparkline d'évolution Elo (3 matchs joués)
+  await expectVisible(page.getByRole("img", { name: /Évolution Elo/ }));
   await shot("profil");
 });
 
@@ -282,11 +286,28 @@ await check("la fiche joueur (bio, côté, raquette) s'enregistre et s'affiche",
   await expectVisible(page.getByText("Côté gauche"), 10000);
 });
 
-/* 10. Logout / login ------------------------------------------------------- */
-await check("déconnexion puis reconnexion", async () => {
+/* 10. Logout --------------------------------------------------------------- */
+await check("déconnexion", async () => {
   const btn = page.getByRole("button", { name: /Se déconnecter|Déconnexion/ });
   await btn.click();
   await page.waitForURL(/\/(login)?$/, { timeout: 10000 }).catch(() => {});
+});
+
+/* 11. Fiche joueur publique ------------------------------------------------- */
+await check("la fiche publique d'un joueur est consultable depuis le classement", async () => {
+  await page.goto(BASE + "/leaderboard", { waitUntil: "networkidle" });
+  await page.getByText("Tsiresy R.").first().click();
+  await page.waitForURL("**/players/**", { timeout: 10000 });
+  await expectVisible(page.getByText(/Licence PadelPro/i));
+  await expectVisible(page.getByText("« Bandeja létale, lobs vicieux. »"));
+  await expectVisible(page.getByText("Côté gauche"));
+  await expectVisible(page.getByText("Bullpadel Vertex 04"));
+  await expectVisible(page.getByText("Trophées du club"));
+  await shot("fiche-publique");
+});
+
+/* 12. Login ----------------------------------------------------------------- */
+await check("reconnexion", async () => {
   await page.goto(BASE + "/login", { waitUntil: "networkidle" });
   await page.fill("#email", "tsiresy@test.fr");
   await page.fill("#password", "MotDePasse!123");
