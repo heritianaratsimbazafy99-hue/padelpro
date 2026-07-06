@@ -4,58 +4,81 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Reinitialise ton mot de passe</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+    </style>
   </head>
-  <body style="margin:0;background:#f8fafc;color:#1e293b;font-family:Arial,Helvetica,sans-serif;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+  <body style="margin:0;background:#f3f0e6;color:#14210f;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
       Choisis un nouveau mot de passe PadelPro avec ce lien securise.
     </div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f0e6;">
       <tr>
-        <td align="center" style="padding:32px 16px;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+        <td align="center" style="padding:34px 16px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fbf9f2;border:1px solid #ddd7c2;border-radius:24px;overflow:hidden;">
             <tr>
-              <td style="background:#0b1220;padding:28px 28px 24px;">
-                <p style="margin:0 0 14px;color:#c8f542;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;">
-                  PadelPro
-                </p>
-                <h1 style="margin:0;color:#ffffff;font-size:28px;line-height:1.22;font-weight:800;">
-                  Reinitialise ton mot de passe
-                </h1>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:28px;">
-                <p style="margin:0 0 18px;color:#334155;font-size:16px;line-height:1.6;">
-                  Nous avons recu une demande de reinitialisation. Utilise le bouton ci-dessous pour
-                  choisir un nouveau mot de passe.
-                </p>
-                <p style="margin:0 0 24px;">
-                  <a
-                    href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password"
-                    style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:800;font-size:15px;line-height:1;padding:15px 20px;border-radius:8px;"
-                  >
-                    Choisir un nouveau mot de passe
-                  </a>
-                </p>
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+              <td style="padding:28px 28px 20px;background:#fbf9f2;border-bottom:1px solid #ddd7c2;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                   <tr>
-                    <td style="padding:14px 16px;">
-                      <p style="margin:0;color:#9a3412;font-size:13px;line-height:1.55;font-weight:700;">
-                        Tu n'es pas a l'origine de cette demande ?
+                    <td style="width:52px;vertical-align:middle;">
+                      <div style="width:44px;height:44px;border-radius:14px;background:#c8f542;color:#17230a;text-align:center;line-height:44px;font-family:'Space Grotesk','Plus Jakarta Sans','Segoe UI',Arial,sans-serif;font-size:16px;font-weight:700;">
+                        PP
+                      </div>
+                    </td>
+                    <td style="vertical-align:middle;">
+                      <p style="margin:0;font-family:'Space Grotesk','Plus Jakarta Sans','Segoe UI',Arial,sans-serif;font-size:20px;line-height:1.1;font-weight:700;color:#14210f;">
+                        Padel<span style="color:#8cb80f;">Pro</span>
                       </p>
-                      <p style="margin:6px 0 0;color:#9a3412;font-size:13px;line-height:1.55;">
-                        Ignore cet email. Ton mot de passe actuel ne change pas tant que ce lien n'est pas utilise.
+                      <p style="margin:5px 0 0;color:#5c664e;font-size:13px;line-height:1.35;font-weight:600;">
+                        Ton club, tes matchs, ton classement.
                       </p>
                     </td>
                   </tr>
                 </table>
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;">
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px 28px 28px;">
+                <p style="margin:0 0 12px;color:#e8582f;font-size:12px;line-height:1.3;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">
+                  S&eacute;curit&eacute; du compte
+                </p>
+                <h1 style="margin:0 0 18px;color:#14210f;font-family:'Space Grotesk','Plus Jakarta Sans','Segoe UI',Arial,sans-serif;font-size:32px;line-height:1.08;font-weight:700;letter-spacing:-0.01em;">
+                  R&eacute;initialise ton mot de passe
+                </h1>
+                <p style="margin:0 0 24px;color:#5c664e;font-size:16px;line-height:1.65;font-weight:500;">
+                  Nous avons re&ccedil;u une demande de r&eacute;initialisation. Utilise ce lien pour choisir
+                  un nouveau mot de passe et reprendre tes parties proprement.
+                </p>
+                <p style="margin:0 0 24px;">
+                  <a
+                    href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password"
+                    style="display:inline-block;background:#c8f542;color:#17230a;text-decoration:none;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif;font-weight:800;font-size:15px;line-height:1;padding:16px 22px;border-radius:16px;border:1px solid #b3e42e;"
+                  >
+                    Choisir un nouveau mot de passe
+                  </a>
+                </p>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f9e6dd;border:1px solid #e8582f;border-radius:18px;">
                   <tr>
-                    <td style="padding:14px 16px;">
-                      <p style="margin:0;color:#475569;font-size:13px;line-height:1.55;">
-                        Si le bouton ne fonctionne pas, copie ce lien dans ton navigateur :
+                    <td style="padding:16px 18px;">
+                      <p style="margin:0;color:#14351f;font-size:13px;line-height:1.55;font-weight:800;">
+                        Tu n&apos;es pas &agrave; l&apos;origine de cette demande ?
                       </p>
-                      <p style="margin:8px 0 0;word-break:break-all;color:#1d4ed8;font-size:12px;line-height:1.5;">
+                      <p style="margin:7px 0 0;color:#5c664e;font-size:13px;line-height:1.55;">
+                        Ignore cet email. Ton mot de passe actuel ne change pas tant que ce lien n&apos;est pas utilis&eacute;.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;background:#eae6d7;border:1px solid #ddd7c2;border-radius:18px;">
+                  <tr>
+                    <td style="padding:16px 18px;">
+                      <p style="margin:0;color:#5c664e;font-size:13px;line-height:1.55;font-weight:700;">
+                        Le bouton ne s&apos;ouvre pas ?
+                      </p>
+                      <p style="margin:7px 0 0;color:#5c664e;font-size:13px;line-height:1.55;">
+                        Copie ce lien dans ton navigateur :
+                      </p>
+                      <p style="margin:10px 0 0;word-break:break-all;color:#14351f;font-size:12px;line-height:1.5;font-weight:700;">
                         {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password
                       </p>
                     </td>
@@ -64,9 +87,9 @@
               </td>
             </tr>
             <tr>
-              <td style="padding:18px 28px 28px;border-top:1px solid #e2e8f0;">
-                <p style="margin:0;color:#64748b;font-size:12px;line-height:1.55;">
-                  Pour ta securite, ce lien est personnel et expire automatiquement.
+              <td style="padding:20px 28px 28px;border-top:1px solid #ddd7c2;background:#f3f0e6;">
+                <p style="margin:0;color:#5c664e;font-size:12px;line-height:1.6;">
+                  Pour ta s&eacute;curit&eacute;, ce lien est personnel et expire automatiquement.
                 </p>
               </td>
             </tr>

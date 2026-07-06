@@ -4,52 +4,69 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Confirme ton adresse email</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
+    </style>
   </head>
-  <body style="margin:0;background:#f8fafc;color:#1e293b;font-family:Arial,Helvetica,sans-serif;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
-      Active ton compte PadelPro pour commencer a organiser tes parties.
+  <body style="margin:0;background:#f3f0e6;color:#14210f;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+      Active ton compte PadelPro pour organiser tes parties et suivre tes scores.
     </div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f0e6;">
       <tr>
-        <td align="center" style="padding:32px 16px;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+        <td align="center" style="padding:34px 16px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fbf9f2;border:1px solid #ddd7c2;border-radius:24px;overflow:hidden;">
             <tr>
-              <td style="background:#0b1220;padding:28px 28px 24px;">
+              <td style="padding:28px 28px 20px;background:#fbf9f2;border-bottom:1px solid #ddd7c2;">
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                   <tr>
-                    <td>
-                      <p style="margin:0 0 14px;color:#c8f542;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;">
-                        PadelPro
+                    <td style="width:52px;vertical-align:middle;">
+                      <div style="width:44px;height:44px;border-radius:14px;background:#c8f542;color:#17230a;text-align:center;line-height:44px;font-family:'Space Grotesk','Plus Jakarta Sans','Segoe UI',Arial,sans-serif;font-size:16px;font-weight:700;">
+                        PP
+                      </div>
+                    </td>
+                    <td style="vertical-align:middle;">
+                      <p style="margin:0;font-family:'Space Grotesk','Plus Jakarta Sans','Segoe UI',Arial,sans-serif;font-size:20px;line-height:1.1;font-weight:700;color:#14210f;">
+                        Padel<span style="color:#8cb80f;">Pro</span>
                       </p>
-                      <h1 style="margin:0;color:#ffffff;font-size:28px;line-height:1.22;font-weight:800;">
-                        Confirme ton adresse email
-                      </h1>
+                      <p style="margin:5px 0 0;color:#5c664e;font-size:13px;line-height:1.35;font-weight:600;">
+                        Americanos, tournois et scores en direct.
+                      </p>
                     </td>
                   </tr>
                 </table>
               </td>
             </tr>
             <tr>
-              <td style="padding:28px;">
-                <p style="margin:0 0 18px;color:#334155;font-size:16px;line-height:1.6;">
-                  Ton compte est presque pret. Confirme ton adresse pour securiser l'acces a tes evenements,
-                  tableaux et scores.
+              <td style="padding:32px 28px 28px;">
+                <p style="margin:0 0 12px;color:#e8582f;font-size:12px;line-height:1.3;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;">
+                  Invitation joueur
+                </p>
+                <h1 style="margin:0 0 18px;color:#14210f;font-family:'Space Grotesk','Plus Jakarta Sans','Segoe UI',Arial,sans-serif;font-size:32px;line-height:1.08;font-weight:700;letter-spacing:-0.01em;">
+                  Confirme ton adresse email
+                </h1>
+                <p style="margin:0 0 24px;color:#5c664e;font-size:16px;line-height:1.65;font-weight:500;">
+                  Ton compte est presque pr&ecirc;t. Confirme ton adresse pour s&eacute;curiser l&apos;acc&egrave;s
+                  &agrave; tes &eacute;v&eacute;nements, tes tableaux et ton classement.
                 </p>
                 <p style="margin:0 0 24px;">
                   <a
                     href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/dashboard"
-                    style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:800;font-size:15px;line-height:1;padding:15px 20px;border-radius:8px;"
+                    style="display:inline-block;background:#c8f542;color:#17230a;text-decoration:none;font-family:'Plus Jakarta Sans','Segoe UI',Arial,sans-serif;font-weight:800;font-size:15px;line-height:1;padding:16px 22px;border-radius:16px;border:1px solid #b3e42e;"
                   >
                     Confirmer mon email
                   </a>
                 </p>
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eae6d7;border:1px solid #ddd7c2;border-radius:18px;">
                   <tr>
-                    <td style="padding:14px 16px;">
-                      <p style="margin:0;color:#475569;font-size:13px;line-height:1.55;">
-                        Si le bouton ne fonctionne pas, copie ce lien dans ton navigateur :
+                    <td style="padding:16px 18px;">
+                      <p style="margin:0;color:#5c664e;font-size:13px;line-height:1.55;font-weight:700;">
+                        Le bouton ne s&apos;ouvre pas ?
                       </p>
-                      <p style="margin:8px 0 0;word-break:break-all;color:#1d4ed8;font-size:12px;line-height:1.5;">
+                      <p style="margin:7px 0 0;color:#5c664e;font-size:13px;line-height:1.55;">
+                        Copie ce lien dans ton navigateur :
+                      </p>
+                      <p style="margin:10px 0 0;word-break:break-all;color:#14351f;font-size:12px;line-height:1.5;font-weight:700;">
                         {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/dashboard
                       </p>
                     </td>
@@ -58,9 +75,9 @@
               </td>
             </tr>
             <tr>
-              <td style="padding:18px 28px 28px;border-top:1px solid #e2e8f0;">
-                <p style="margin:0;color:#64748b;font-size:12px;line-height:1.55;">
-                  Tu peux ignorer cet email si tu n'as pas demande la creation d'un compte PadelPro.
+              <td style="padding:20px 28px 28px;border-top:1px solid #ddd7c2;background:#f3f0e6;">
+                <p style="margin:0;color:#5c664e;font-size:12px;line-height:1.6;">
+                  Tu peux ignorer cet email si tu n&apos;as pas demand&eacute; la cr&eacute;ation d&apos;un compte PadelPro.
                 </p>
               </td>
             </tr>

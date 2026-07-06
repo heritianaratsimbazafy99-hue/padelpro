@@ -7,9 +7,19 @@ Source locale des templates configures dans Supabase Auth.
 | Template Supabase | Sujet | Fichier |
 | --- | --- | --- |
 | `confirmation` | `Confirme ton adresse email` | `confirmation.html` |
-| `recovery` | `Reinitialise ton mot de passe` | `recovery.html` |
+| `recovery` | `Réinitialise ton mot de passe` | `recovery.html` |
 
 L'application utilise `supabase.auth.signUp()` avec confirmation email et `supabase.auth.resetPasswordForEmail()` pour la reinitialisation de mot de passe. Les templates `invite`, `magic_link`, `email_change` et `reauthentication` ne sont donc pas personnalises tant que les parcours correspondants ne sont pas exposes dans l'app.
+
+La direction visuelle suit les tokens de l'app `Club Editorial` :
+
+- fond papier creme `#f3f0e6`
+- surface `#fbf9f2`
+- bordures `#ddd7c2`
+- texte `#14210f`
+- CTA lime `#c8f542`
+- accent terracotta `#e8582f`
+- pile typo email : `Plus Jakarta Sans`, `Space Grotesk`, puis fallbacks systeme
 
 Les liens des templates actifs utilisent le flux PKCE recommande pour SSR :
 
