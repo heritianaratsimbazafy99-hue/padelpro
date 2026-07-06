@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Repeat, Scale, Shuffle, Trash2, TrendingUp, Trophy, Users } from "lucide-react";
+import { ArrowRight, Repeat, Scale, Shuffle, Trash2, TrendingUp, Trophy, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
 import { Avatar, Badge, Button, Field, Input, Segmented, Stepper } from "@/components/ui";
@@ -292,8 +292,13 @@ export default function NewEventPage() {
                 placeholder="Nom du joueur"
                 maxLength={40}
               />
-              <Button type="submit" aria-label="Ajouter le joueur" className="shrink-0 w-12 px-0">
-                <Plus className="size-5" />
+              <Button
+                type="submit"
+                aria-label="Ajouter le joueur"
+                className="h-12 min-h-12 min-w-[6.75rem] shrink-0 px-4"
+              >
+                <span>Ajouter</span>
+                <ArrowRight className="size-4" aria-hidden />
               </Button>
             </form>
             {error && (
