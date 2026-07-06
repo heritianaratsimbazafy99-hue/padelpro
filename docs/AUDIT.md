@@ -188,3 +188,64 @@ le score live, le classement.
   UI avec rollback), **zéro erreur JS** ; captures desktop/mobile + états
   intermédiaires de l'animation hero.
 - **Moteur 13/13** (`node --test`), **lint 0 erreur / 0 warning**, build prod OK.
+
+## 12. Itération 2 — americano à 8 joueurs, manifeste rebondissant, célébrations
+
+### Hero : « Rotation des joueurs » (americano à 8)
+- La scène passe de 4 à **8 joueurs** : Heritiana, Salman, Dera, Tsiresy sur le
+  court ; Johary, Sanda, Frédérique, Teddy **au banc** (colonne « Au repos » le
+  long du terrain). Scoreboard renommé « **Americano du lundi** ».
+- Nouvelle transition « **Rotation des joueurs** » : le quatuor du court glisse
+  vers le banc pendant que le banc entre en jeu (chip terracotta dédié, maillots
+  qui changent de couleur : lime/terracotta sur le court, neutre au repos).
+  Le round 3 mixe les deux groupes (« Rotation des paires » : les 4 meneurs se
+  retrouvent) — libellés « Round n/7 » cohérents avec un americano à 8.
+- **Classement à fenêtre top-4** : les 8 joueurs vivent dans la chip, seuls les
+  4 premiers sont visibles ; aux changements de rang, les lignes glissent
+  dedans/dehors (masquage + fondu). Scénario : Salman arrache la couronne.
+- **Boost au scroll** (scrub) : la perspective du terrain se redresse légèrement
+  (`rotationX/Z + scale` sur un wrapper dédié) pendant que le hero défile.
+- Les noms du Showcase (« Pendant que tu joues ») et des podiums de la landing
+  reprennent les 4 premiers : Heritiana, Salman, Dera, Tsiresy.
+
+### Manifeste : la balle qui écrit la phrase
+- Texte raccourci et percutant : « **Zéro papier. Zéro calcul.** *Juste du
+  padel.* » (serif italique lime en chute).
+- Une **balle de padel rebondit de mot en mot au scroll** (scrub GSAP +
+  SplitText) : chaque impact « allume » le mot (opacité), l'enfonce brièvement
+  et squashe la balle ; sortie de scène en fin de phrase. Positions
+  fonctionnelles (`invalidateOnRefresh`) → responsive. Reduced-motion : texte
+  plein, balle masquée.
+
+### Annonce de score : célébrations aléatoires (victoire / défaite)
+- Nouveau composant **`Celebration`** (`celebration.tsx`) : à chaque score
+  annoncé sur un de MES matchs (côté participant), une célébration plein écran
+  se joue — **3 variantes de victoire** (confettis + tampon « Victoire ! »,
+  pluie de balles « Quel match ! », smash + onde de choc) et **3 variantes de
+  défaite** (tampon terracotta + vignette, balle qui perd son énergie « Ça se
+  rejouera. », balle dans le filet), tirées au hasard.
+- Déclenchement via la transition `pending → done` des matchs : fonctionne pour
+  **l'annonceur (optimistic)** comme pour **les 3 autres joueurs (Realtime)** ;
+  anti-doublon par match, réarmé en cas de rollback. Overlay
+  `pointer-events-none`, annonce `sr-only role=status`, keyframes neutralisées
+  en reduced-motion. Le podium confettis existant est conservé.
+
+### Un seul joueur annonce (vérifié + rendu explicite)
+- Vérifié côté SQL : `report_score` valide par share_code, **aucune
+  confirmation croisée requise** — n'importe quel joueur de la paire (ou
+  l'organisateur) annonce, tout le monde reçoit en Realtime.
+- Rendu visible : mention « *Un seul joueur annonce : le score se met à jour
+  pour tout le monde, en direct.* » dans la feuille de score, et « Score
+  annoncé par X » sur les cartes de match terminées.
+
+### Swipe entre rounds (mobile)
+- Sur la page organisateur, **glisser horizontalement** sur la liste des matchs
+  change de round (seuil 56 px, geste franchement horizontal pour ne pas gêner
+  le scroll) ; le contenu glisse dans le sens du geste (`slide-l/r`), pastilles
+  et bouton « Voir le round suivant » alignés sur la même transition.
+
+### Vérification (itération 2)
+- **E2E 12/12** (dont célébration affichée à l'annonce participant), zéro
+  erreur JS ; moteur **13/13** ; lint **0/0** ; build prod OK ; captures
+  desktop + mobile (rotation des joueurs, banc, manifeste à 3 positions de
+  scroll).

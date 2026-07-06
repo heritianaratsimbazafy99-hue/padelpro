@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -52,6 +52,8 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
   const [confirmAction, setConfirmAction] = useState<"complete" | "delete" | null>(null);
   const [newPlayer, setNewPlayer] = useState("");
   const [viewRound, setViewRound] = useState<number | null>(null);
+  const [roundAnim, setRoundAnim] = useState<"l" | "r" | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   const playerName = useMemo(() => {
     const map = new Map(players.map((p) => [p.id, p.display_name]));
@@ -61,6 +63,14 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
   useEscapeClose(confirmAction !== null, () => setConfirmAction(null));
   useEscapeClose(showQR, () => setShowQR(false));
   const confirmTrapRef = useFocusTrap<HTMLDivElement>(confirmAction !== null);
+
+  /* Navigation entre rounds : clic sur les pastilles ou swipe horizontal
+     (mobile) — le contenu glisse dans le sens du geste. */
+  function goToRound(r: number, max: number, current: number) {
+    if (r < 1 || r > max || r === current) return;
+    setRoundAnim(r > current ? "l" : "r");
+    setViewRound(r);
+  }
 
   /* Optimistic UI : le score s'applique localement tout de suite, le toast
      confirme (ou signale le rollback en cas d'erreur serveur). */
@@ -298,7 +308,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                     return (
                       <button
                         key={r}
-                        onClick={() => setViewRound(r)}
+                        onClick={() => goToRound(r, maxRound, displayRound)}
                         aria-pressed={displayRound === r}
                         className={`shrink-0 h-9 px-4 rounded-full text-sm font-bold cursor-pointer transition-colors border ${
                           displayRound === r
@@ -315,25 +325,46 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                   })}
                 </div>
 
-                {roundMatches.map((m, i) => (
-                  <div key={m.id} className="stagger-i" style={{ "--i": i } as React.CSSProperties}>
-                    <MatchCard
-                      match={m}
-                      playerName={playerName}
-                      onClick={isActive ? () => setScoringMatch(m) : undefined}
-                    />
-                  </div>
-                ))}
+                {/* Matchs du round : swipe gauche/droite pour changer de round */}
+                <div
+                  key={displayRound}
+                  className={`flex flex-col gap-4 ${
+                    roundAnim === "l" ? "animate-slide-l" : roundAnim === "r" ? "animate-slide-r" : ""
+                  }`}
+                  onTouchStart={(e) => {
+                    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                  }}
+                  onTouchEnd={(e) => {
+                    const s = touchStart.current;
+                    touchStart.current = null;
+                    if (!s) return;
+                    const dx = e.changedTouches[0].clientX - s.x;
+                    const dy = e.changedTouches[0].clientY - s.y;
+                    /* Geste franchement horizontal uniquement (le scroll vertical garde la main) */
+                    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+                    goToRound(displayRound + (dx < 0 ? 1 : -1), maxRound, displayRound);
+                  }}
+                >
+                  {roundMatches.map((m, i) => (
+                    <div key={m.id} className="stagger-i" style={{ "--i": i } as React.CSSProperties}>
+                      <MatchCard
+                        match={m}
+                        playerName={playerName}
+                        onClick={isActive ? () => setScoringMatch(m) : undefined}
+                      />
+                    </div>
+                  ))}
 
-                {restingIds.length > 0 && (
-                  <div className="flex items-center gap-2.5 bg-surface-2 border border-border rounded-(--radius-field) px-4 py-3">
-                    <Coffee className="size-4 text-ink-faint shrink-0" aria-hidden />
-                    <p className="text-sm text-ink-muted">
-                      <span className="font-semibold text-ink">Au repos :</span>{" "}
-                      {restingIds.join(", ")}
-                    </p>
-                  </div>
-                )}
+                  {restingIds.length > 0 && (
+                    <div className="flex items-center gap-2.5 bg-surface-2 border border-border rounded-(--radius-field) px-4 py-3">
+                      <Coffee className="size-4 text-ink-faint shrink-0" aria-hidden />
+                      <p className="text-sm text-ink-muted">
+                        <span className="font-semibold text-ink">Au repos :</span>{" "}
+                        {restingIds.join(", ")}
+                      </p>
+                    </div>
+                  )}
+                </div>
 
                 {mexicanoCanAdvance && (
                   <Button size="lg" full loading={busy} onClick={() => run(() => nextMexicanoRound(event, players, matches))}>
@@ -341,7 +372,11 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                   </Button>
                 )}
                 {currentRoundDone && displayRound < maxRound && (
-                  <Button variant="secondary" full onClick={() => setViewRound(displayRound + 1)}>
+                  <Button
+                    variant="secondary"
+                    full
+                    onClick={() => goToRound(displayRound + 1, maxRound, displayRound)}
+                  >
                     Voir le round {displayRound + 1}
                   </Button>
                 )}

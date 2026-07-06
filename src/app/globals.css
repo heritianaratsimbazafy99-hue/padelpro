@@ -432,6 +432,175 @@ a,
   animation: score-pop 0.25s ease-out both;
 }
 
+/* --- Célébrations d'annonce de score (composant Celebration) --- */
+
+/* Tampon qui claque au centre de l'écran */
+@keyframes stamp-in {
+  0% {
+    transform: scale(2.4) rotate(var(--stamp-rot, -5deg));
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.94) rotate(var(--stamp-rot, -5deg));
+    opacity: 1;
+  }
+  72% {
+    transform: scale(1.05) rotate(var(--stamp-rot, -5deg));
+  }
+  100% {
+    transform: scale(1) rotate(var(--stamp-rot, -5deg));
+    opacity: 1;
+  }
+}
+.animate-stamp-in {
+  animation: stamp-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Pluie de balles (victoire) */
+@keyframes celeb-fall {
+  from {
+    transform: translateY(-12vh) rotate(0deg);
+  }
+  to {
+    transform: translateY(115vh) rotate(320deg);
+  }
+}
+.animate-celeb-fall {
+  animation: celeb-fall 1.7s cubic-bezier(0.4, 0, 0.85, 0.6) both;
+  animation-delay: calc(var(--i, 0) * 95ms);
+}
+
+/* Onde de choc du smash */
+@keyframes shockwave {
+  from {
+    transform: scale(0.15);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+.animate-shockwave {
+  animation: shockwave 0.9s ease-out both;
+}
+
+/* Balle du smash : chute + squash + petit rebond */
+@keyframes smash-drop {
+  0% {
+    transform: translateY(-58vh) scale(1);
+  }
+  58% {
+    transform: translateY(0) scale(1);
+  }
+  66% {
+    transform: translateY(0) scale(1.35, 0.55);
+  }
+  82% {
+    transform: translateY(-9vh) scale(0.95, 1.05);
+  }
+  93% {
+    transform: translateY(0) scale(1.12, 0.85);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-smash-drop {
+  animation: smash-drop 1.05s cubic-bezier(0.5, 0, 0.7, 0.4) both;
+  transform-origin: bottom center;
+}
+
+/* Balle qui traverse l'écran en perdant son énergie (défaite) */
+@keyframes deflate-bounce {
+  0% {
+    transform: translate(0, -55vh);
+  }
+  24% {
+    transform: translate(16vw, 0);
+  }
+  30% {
+    transform: translate(19vw, 0) scale(1.18, 0.72);
+  }
+  44% {
+    transform: translate(32vw, -20vh) scale(1);
+  }
+  60% {
+    transform: translate(44vw, 0) scale(1.12, 0.8);
+  }
+  74% {
+    transform: translate(54vw, -8vh) scale(1);
+  }
+  85% {
+    transform: translate(61vw, 0) scale(1.06, 0.86);
+  }
+  100% {
+    transform: translate(70vw, 0) scale(1);
+  }
+}
+.animate-deflate-bounce {
+  animation: deflate-bounce 1.9s linear both;
+}
+
+/* Balle qui tombe dans le filet (défaite) */
+@keyframes drop-away {
+  0% {
+    transform: translateY(-15vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(72vh) rotate(240deg);
+    opacity: 0.25;
+  }
+}
+.animate-drop-away {
+  animation: drop-away 1.15s cubic-bezier(0.5, 0, 0.9, 0.6) both;
+}
+
+/* Vignette terracotta (défaite) */
+@keyframes vignette-pulse {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.animate-vignette {
+  animation: vignette-pulse 1.7s ease-out both;
+}
+
+/* Swipe entre rounds : le contenu glisse dans le sens du geste */
+@keyframes slide-l {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes slide-r {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.animate-slide-l {
+  animation: slide-l 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-slide-r {
+  animation: slide-r 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* Transition entre pages (template.tsx) */
 @keyframes page-in {
   from {

@@ -94,6 +94,11 @@ export function MatchCard({
         </div>
         <TeamLine names={t2} score={match.score2} won={t2won} highlight={mine && !inTeam1} />
       </div>
+      {done && match.reported_by && (
+        <p className="text-[0.6875rem] text-ink-faint mt-2.5">
+          Score annoncé par <span className="font-semibold">{match.reported_by}</span>
+        </p>
+      )}
     </button>
   );
 }

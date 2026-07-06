@@ -54,22 +54,56 @@ export function Manifesto() {
     const ctx = gsap.context(() => {
       const mm = gsap.matchMedia();
       mm.add("(prefers-reduced-motion: no-preference)", () => {
+        /* La balle de padel rebondit de mot en mot au scroll (scrub) :
+           chaque impact « allume » le mot et l'enfonce brièvement. */
         const split = new SplitText("[data-manifesto]", { type: "words" });
-        gsap.fromTo(
-          split.words,
-          { opacity: 0.12 },
-          {
-            opacity: 1,
-            stagger: 0.06,
-            ease: "none",
-            scrollTrigger: {
-              trigger: "[data-manifesto]",
-              start: "top 78%",
-              end: "bottom 45%",
-              scrub: 0.4,
-            },
+        const words = split.words as HTMLElement[];
+        const ball = scope.current?.querySelector<HTMLElement>("[data-manifesto-ball]");
+        if (!ball || words.length === 0) return;
+
+        gsap.set(words, { opacity: 0.14, display: "inline-block" });
+        const BALL = 30; // taille de la balle (px)
+        const wx = (w: HTMLElement) => () => w.offsetLeft + w.offsetWidth / 2 - BALL / 2;
+        const wy = (w: HTMLElement) => () => w.offsetTop - BALL - 6;
+
+        const tl = gsap.timeline({
+          scrollTrigger: {
+            trigger: "[data-manifesto]",
+            start: "top 72%",
+            end: "bottom 38%",
+            scrub: 0.5,
+            invalidateOnRefresh: true,
           },
-        );
+        });
+
+        const D = 0.5; // « durée » relative d'un rebond (le scrub remappe)
+        const impact = (w: HTMLElement, at: string) => {
+          tl.to(w, { opacity: 1, duration: 0.12 }, at);
+          tl.fromTo(w, { y: 0 }, { y: 5, yoyo: true, repeat: 1, duration: 0.09 }, "<");
+          tl.fromTo(
+            ball,
+            { scaleY: 0.7, scaleX: 1.25 },
+            { scaleY: 1, scaleX: 1, duration: 0.12 },
+            "<",
+          );
+        };
+
+        /* Premier contact */
+        tl.set(ball, { autoAlpha: 1, x: wx(words[0]), y: wy(words[0]) }, 0);
+        impact(words[0], "0");
+
+        /* Rebonds : arc entre chaque mot */
+        for (let i = 0; i < words.length - 1; i++) {
+          const next = words[i + 1];
+          const apex = () => Math.min(wy(words[i])(), wy(next)()) - 54;
+          tl.to(ball, { x: wx(next), duration: D, ease: "none" }, ">");
+          tl.to(ball, { y: apex, duration: D / 2, ease: "power2.out" }, "<");
+          tl.to(ball, { y: wy(next), duration: D / 2, ease: "power2.in" }, "<" + D / 2);
+          impact(next, ">-0.02");
+        }
+
+        /* Sortie : la balle file hors du cadre */
+        tl.to(ball, { x: "+=110", y: "-=40", autoAlpha: 0, duration: D, ease: "power1.out" }, ">");
       });
     }, scope);
     return () => ctx.revert();
@@ -104,15 +138,24 @@ export function Manifesto() {
         <p data-st-fade className="text-xs font-bold uppercase tracking-[0.3em] text-lime mb-8">
           Le manifeste
         </p>
-        <p
-          data-manifesto
-          className="font-display text-[clamp(1.7rem,4.2vw,3.2rem)] font-bold leading-[1.25] tracking-tight"
-        >
-          Fini le papier, le crayon et les disputes de comptage. Tu crées l&apos;événement,
-          tes joueurs scannent un QR code, et tout s&apos;enchaîne — rotations équitables,
-          scores en direct, classement qui se met à jour tout seul. Toi, tu n&apos;as plus
-          qu&apos;à <span className="font-serif-display italic font-normal text-lime">jouer.</span>
-        </p>
+        <div className="relative">
+          {/* Balle qui rebondit de mot en mot (pilotée au scroll) */}
+          <div
+            data-manifesto-ball
+            aria-hidden
+            className="absolute left-0 top-0 size-[30px] rounded-full ball-lime pointer-events-none z-10"
+            style={{ opacity: 0 }}
+          />
+          <p
+            data-manifesto
+            className="font-display text-[clamp(2.2rem,5.5vw,4.4rem)] font-bold leading-[1.2] tracking-tight"
+          >
+            Zéro papier. Zéro calcul.{" "}
+            <span className="font-serif-display italic font-normal text-lime">
+              Juste du padel.
+            </span>
+          </p>
+        </div>
       </div>
     </section>
   );
@@ -196,9 +239,9 @@ function StepVisual({ kind }: { kind: "form" | "qr" | "podium" }) {
   return (
     <div className="flex items-end justify-center gap-3 h-44 sm:h-52">
       {[
-        { h: "62%", label: "Sofia", medal: "2" },
-        { h: "92%", label: "Léa", medal: "1" },
-        { h: "46%", label: "Karim", medal: "3" },
+        { h: "62%", label: "Salman", medal: "2" },
+        { h: "92%", label: "Heritiana", medal: "1" },
+        { h: "46%", label: "Dera", medal: "3" },
       ].map((p) => (
         <div key={p.label} className="flex flex-col items-center gap-2 h-full justify-end w-20">
           <span className="text-xs font-bold">{p.label}</span>
@@ -317,10 +360,10 @@ export function StepsDeck() {
 /* ------------------------------------------------------------------------ */
 
 const leaderboard = [
-  { rank: 1, name: "Léa", pts: 148, delta: "+12" },
-  { rank: 2, name: "Sofia", pts: 141, delta: "+8" },
-  { rank: 3, name: "Karim", pts: 133, delta: "+5" },
-  { rank: 4, name: "Marco", pts: 127, delta: "-3" },
+  { rank: 1, name: "Heritiana", pts: 148, delta: "+12" },
+  { rank: 2, name: "Salman", pts: 141, delta: "+8" },
+  { rank: 3, name: "Dera", pts: 133, delta: "+5" },
+  { rank: 4, name: "Tsiresy", pts: 127, delta: "-3" },
 ];
 
 export function Showcase() {
@@ -392,9 +435,9 @@ export function Showcase() {
             aria-hidden
           >
             {[
-              { h: "58%", n: "2", name: "Sofia" },
-              { h: "88%", n: "1", name: "Léa" },
-              { h: "42%", n: "3", name: "Karim" },
+              { h: "58%", n: "2", name: "Salman" },
+              { h: "88%", n: "1", name: "Heritiana" },
+              { h: "42%", n: "3", name: "Dera" },
             ].map((p) => (
               <div key={p.n} className="flex flex-col items-center justify-end gap-2 h-full w-24">
                 <span className="text-xs font-bold text-ink-muted">{p.name}</span>

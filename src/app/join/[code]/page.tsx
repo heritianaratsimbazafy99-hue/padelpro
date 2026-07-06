@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Clock, PartyPopper, UserCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -14,6 +14,7 @@ import { ScoreSheet } from "@/components/score-sheet";
 import { Standings } from "@/components/standings";
 import { BracketView } from "@/components/bracket-view";
 import { Podium } from "@/components/podium";
+import { Celebration, type CelebrationData } from "@/components/celebration";
 
 type Tab = "matches" | "standings";
 
@@ -28,8 +29,41 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
   const [tab, setTab] = useState<Tab>("matches");
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null);
   const [toast, setToast] = useState<ToastData | null>(null);
+  const [celebration, setCelebration] = useState<CelebrationData | null>(null);
 
   const storageKey = event ? `padelpro:player:${event.id}` : null;
+
+  /* Célébration quand un de MES matchs passe à « terminé » — que j'aie
+     annoncé moi-même (optimistic) ou qu'un partenaire l'ait fait (Realtime) :
+     un seul joueur de la paire suffit, tout le monde vit le moment. */
+  const prevStatuses = useRef(new Map<string, string>());
+  const celebrated = useRef(new Set<string>());
+  useEffect(() => {
+    for (const m of matches) {
+      const prev = prevStatuses.current.get(m.id);
+      /* Rollback (échec serveur) : réarme la célébration pour ce match. */
+      if (prev === "done" && m.status === "pending") celebrated.current.delete(m.id);
+      if (
+        meId &&
+        prev === "pending" &&
+        m.status === "done" &&
+        !celebrated.current.has(m.id) &&
+        m.score1 !== null &&
+        m.score2 !== null &&
+        m.score1 !== m.score2 &&
+        [m.team1_p1, m.team1_p2, m.team2_p1, m.team2_p2].includes(meId)
+      ) {
+        celebrated.current.add(m.id);
+        const inTeam1 = [m.team1_p1, m.team1_p2].includes(meId);
+        const won = inTeam1 ? m.score1 > m.score2 : m.score2 > m.score1;
+        setCelebration({
+          kind: won ? "win" : "loss",
+          variant: Math.floor(Math.random() * 3) as CelebrationData["variant"],
+        });
+      }
+    }
+    prevStatuses.current = new Map(matches.map((m) => [m.id, m.status]));
+  }, [matches, meId]);
 
   const playerName = useMemo(() => {
     const map = new Map(players.map((p) => [p.id, p.display_name]));
@@ -304,6 +338,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
         />
       )}
       {toast && <Toast toast={toast} onDone={() => setToast(null)} />}
+      {celebration && <Celebration data={celebration} onDone={() => setCelebration(null)} />}
     </main>
   );
 }

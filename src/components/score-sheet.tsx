@@ -144,7 +144,10 @@ export function ScoreSheet({
               {" "}
               · {total} points à répartir — ajuster une équipe ajuste l&apos;autre.
             </>
-          )}
+          )}{" "}
+          <span className="text-ink-faint">
+            Un seul joueur annonce : le score se met à jour pour tout le monde, en direct.
+          </span>
         </p>
         <div className="flex flex-col gap-4 mb-5">
           <ScoreRow label={t1 || "Équipe 1"} value={s1} onChange={setTeam1} />

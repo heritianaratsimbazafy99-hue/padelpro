@@ -182,6 +182,13 @@ await check("un participant (connecté) choisit son nom et annonce un score", as
     .then(() => true)
     .catch(() => false);
   if (!sheetGone) throw new Error("la feuille de score ne s'est pas fermée immédiatement");
+  // Célébration (victoire ou défaite, variante aléatoire) déclenchée aussitôt
+  await page
+    .locator("[data-celebration]")
+    .waitFor({ state: "attached", timeout: 900 })
+    .catch(() => {
+      throw new Error("aucune célébration affichée après l'annonce du score");
+    });
   await shot("join-score-optimiste");
   // Confirmation serveur : toast de succès
   await expectVisible(page.getByText("Score enregistré"), 5000);
