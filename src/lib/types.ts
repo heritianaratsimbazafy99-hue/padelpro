@@ -3,10 +3,20 @@ export type EventStatus = "draft" | "active" | "completed";
 export type MatchStatus = "pending" | "done";
 export type PairingMode = "random" | "balanced";
 
+export type PreferredSide = "left" | "right" | "both";
+
 export interface Profile {
   id: string;
   display_name: string;
   created_at: string;
+  /** Photo de profil (URL publique du bucket "avatars"). */
+  avatar_url: string | null;
+  /** Description libre du joueur (280 caractères max). */
+  bio: string | null;
+  /** Côté préféré sur le terrain. */
+  preferred_side: PreferredSide | null;
+  /** Raquette utilisée (marque / modèle). */
+  racket: string | null;
 }
 
 export interface EventSettings {
@@ -42,6 +52,8 @@ export interface EventPlayer {
   profile_id: string | null;
   level: number; // 1-10 self/organizer assessed level, used for balanced pairing
   seed: number; // tournament seeding order
+  /** Copié du profil au claim ; utilisé par l'appariement équilibré. */
+  preferred_side: PreferredSide | null;
   created_at: string;
 }
 

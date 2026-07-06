@@ -105,12 +105,13 @@ export function roundLabel(roundNumber: number, totalRounds: number): string {
 
 /**
  * Compose les équipes d'un tournoi à partir de joueurs individuels.
- * - "balanced" : le meilleur joue avec le moins fort (1+2n, 2+2n-1, …) ;
+ * - "balanced" : le meilleur joue avec le moins fort (1+2n, 2+2n-1, …), en
+ *   évitant d'associer deux joueurs qui préfèrent strictement le même côté ;
  * - "random"   : tirage aléatoire.
  * Les seeds sont attribués selon la force cumulée de l'équipe.
  */
 export function composeTeams(
-  players: Array<{ id: string; level: number }>,
+  players: Array<{ id: string; level: number; side?: "left" | "right" | "both" | null }>,
   mode: "random" | "balanced",
 ): Array<{ p1: string; p2: string; strength: number }> {
   if (players.length < 4 || players.length % 2 !== 0) {
@@ -120,9 +121,19 @@ export function composeTeams(
   const teams: Array<{ p1: string; p2: string; strength: number }> = [];
   if (mode === "balanced") {
     pool.sort((a, b) => b.level - a.level);
+    const conflict = (a: (typeof pool)[number], b: (typeof pool)[number]) =>
+      a.side != null && a.side !== "both" && a.side === b.side;
     while (pool.length) {
       const strong = pool.shift()!;
-      const weak = pool.pop()!;
+      // Partenaire le plus faible dont le côté est compatible ; à défaut, le plus faible.
+      let pick = pool.length - 1;
+      for (let i = pool.length - 1; i >= 0; i--) {
+        if (!conflict(strong, pool[i])) {
+          pick = i;
+          break;
+        }
+      }
+      const weak = pool.splice(pick, 1)[0];
       teams.push({ p1: strong.id, p2: weak.id, strength: strong.level + weak.level });
     }
   } else {

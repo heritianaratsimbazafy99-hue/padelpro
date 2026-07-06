@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Crown, Medal } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
@@ -30,6 +31,7 @@ export default function LeaderboardPage() {
   const supabase = useMemo(() => createClient(), []);
   const [rows, setRows] = useState<LeaderRow[] | null>(null);
   const [meId, setMeId] = useState<string | null>(null);
+  const [avatars, setAvatars] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     (async () => {
@@ -38,7 +40,22 @@ export default function LeaderboardPage() {
         supabase.auth.getUser(),
       ]);
       setMeId(auth.user?.id ?? null);
-      setRows((data ?? []) as LeaderRow[]);
+      const board = (data ?? []) as LeaderRow[];
+      setRows(board);
+      // Photos de profil des joueurs classés (fiches publiques)
+      if (board.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, avatar_url")
+          .in("id", board.map((r) => r.p_id));
+        setAvatars(
+          new Map(
+            ((profiles ?? []) as Array<{ id: string; avatar_url: string | null }>)
+              .filter((p) => p.avatar_url)
+              .map((p) => [p.id, p.avatar_url!]),
+          ),
+        );
+      }
     })();
   }, [supabase]);
 
@@ -76,28 +93,34 @@ export default function LeaderboardPage() {
                 return (
                   <li
                     key={row.p_id}
-                    className={`stagger-i grid grid-cols-[2.5rem_1fr_3rem_3rem_3.5rem] items-center gap-2 px-4 py-3 border-b border-border last:border-b-0 transition-colors hover:bg-surface-2/60 ${
-                      me ? "bg-lime/5" : ""
-                    }`}
+                    className="stagger-i border-b border-border last:border-b-0"
                     style={{ "--i": Math.min(i, 12) } as React.CSSProperties}
                   >
-                    <span
-                      className={`inline-flex items-center justify-center size-7 rounded-full border text-xs font-extrabold ${
-                        i < 3 ? medalTones[i] : "border-transparent text-ink-faint"
+                    <Link
+                      href={me ? "/profile" : `/players/${row.p_id}`}
+                      aria-label={`Voir la fiche de ${row.p_name}`}
+                      className={`grid grid-cols-[2.5rem_1fr_3rem_3rem_3.5rem] items-center gap-2 px-4 py-3 transition-colors hover:bg-surface-2/60 active:bg-surface-2 ${
+                        me ? "bg-lime/5" : ""
                       }`}
                     >
-                      {i === 0 ? <Crown className="size-4" aria-label="1er" /> : i + 1}
-                    </span>
-                    <span className="flex items-center gap-2.5 min-w-0">
-                      <Avatar name={row.p_name} size="sm" />
-                      <span className={`truncate text-sm ${me ? "font-bold text-court" : "font-semibold"}`}>
-                        {row.p_name}
-                        {me && <span className="text-ink-faint font-medium"> (toi)</span>}
+                      <span
+                        className={`inline-flex items-center justify-center size-7 rounded-full border text-xs font-extrabold ${
+                          i < 3 ? medalTones[i] : "border-transparent text-ink-faint"
+                        }`}
+                      >
+                        {i === 0 ? <Crown className="size-4" aria-label="1er" /> : i + 1}
                       </span>
-                    </span>
-                    <span className="tnum text-center text-sm text-ink-muted">{row.p_played}</span>
-                    <span className="tnum text-center text-sm text-ink-muted">{row.p_wins}</span>
-                    <span className="tnum text-right text-base font-extrabold">{row.p_elo}</span>
+                      <span className="flex items-center gap-2.5 min-w-0">
+                        <Avatar name={row.p_name} src={avatars.get(row.p_id)} size="sm" />
+                        <span className={`truncate text-sm ${me ? "font-bold text-court" : "font-semibold"}`}>
+                          {row.p_name}
+                          {me && <span className="text-ink-faint font-medium"> (toi)</span>}
+                        </span>
+                      </span>
+                      <span className="tnum text-center text-sm text-ink-muted">{row.p_played}</span>
+                      <span className="tnum text-center text-sm text-ink-muted">{row.p_wins}</span>
+                      <span className="tnum text-right text-base font-extrabold">{row.p_elo}</span>
+                    </Link>
                   </li>
                 );
               })}

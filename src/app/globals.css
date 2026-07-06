@@ -97,16 +97,6 @@ h2 {
     radial-gradient(ellipse 40% 35% at 85% 15%, rgba(232, 88, 47, 0.1), transparent 70%);
 }
 
-/* Grain subtil par-dessus les décors */
-.noise::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.35;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
 .glow-lime {
   box-shadow: 0 0 40px -8px rgba(200, 245, 66, 0.35);
 }
@@ -132,14 +122,6 @@ h2 {
     rgba(232, 88, 47, 0.25) 70%,
     rgba(179, 228, 46, 0.5)
   );
-}
-
-/* Texte dégradé lime → blanc */
-.text-gradient {
-  background: linear-gradient(120deg, var(--court-2) 0%, #4f7a1d 55%, #7aa511 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
 }
 
 /* ---------------------------------------------------------------------------
@@ -617,49 +599,6 @@ a,
   animation: page-in 0.3s ease-out both;
 }
 
-/* Reveal au scroll (IntersectionObserver → .is-inview) */
-.reveal {
-  opacity: 0;
-  transform: translateY(20px);
-  transition:
-    opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-  transition-delay: var(--reveal-delay, 0ms);
-}
-.reveal.is-inview {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Cascade : chaque enfant direct hérite d'un délai croissant */
-.stagger > * {
-  --reveal-delay: 0ms;
-}
-.stagger > *:nth-child(2) {
-  --reveal-delay: 60ms;
-}
-.stagger > *:nth-child(3) {
-  --reveal-delay: 120ms;
-}
-.stagger > *:nth-child(4) {
-  --reveal-delay: 180ms;
-}
-.stagger > *:nth-child(5) {
-  --reveal-delay: 240ms;
-}
-.stagger > *:nth-child(6) {
-  --reveal-delay: 300ms;
-}
-.stagger > *:nth-child(7) {
-  --reveal-delay: 360ms;
-}
-.stagger > *:nth-child(8) {
-  --reveal-delay: 420ms;
-}
-.stagger > *:nth-child(n + 9) {
-  --reveal-delay: 480ms;
-}
-
 /* Cascade légère pilotée par --i (listes dynamiques) */
 .stagger-i {
   animation: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -676,10 +615,6 @@ a,
   }
   html {
     scroll-behavior: auto;
-  }
-  .reveal {
-    opacity: 1;
-    transform: none;
   }
 }
 
@@ -787,16 +722,6 @@ a,
   .curtain-2 {
     display: none;
   }
-}
-
-/* Badge circulaire tournant */
-@keyframes spin-slow {
-  to {
-    transform: rotate(360deg);
-  }
-}
-.animate-spin-slow {
-  animation: spin-slow 16s linear infinite;
 }
 
 /* Ombres douces « papier » du thème clair */

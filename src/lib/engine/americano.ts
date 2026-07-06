@@ -13,12 +13,18 @@
  *    existe (pénalité quadratique + optimisation par recherche locale) ;
  *  - les re-rencontres en adversaires sont minimisées ;
  *  - en mode « équilibré », l'écart de niveau entre les deux équipes de chaque
- *    match est minimisé, à priorité égale avec la rotation.
+ *    match est minimisé, à priorité égale avec la rotation ;
+ *  - en mode « équilibré », deux joueurs qui préfèrent strictement le même
+ *    côté (gauche/gauche ou droite/droite) sont évités en équipe.
  */
+
+export type EngineSide = "left" | "right" | "both";
 
 export interface EnginePlayer {
   id: string;
   level: number; // 1-10
+  /** Côté préféré (issu du profil) ; absent/both = flexible. */
+  side?: EngineSide | null;
 }
 
 export interface PlannedMatch {
@@ -38,6 +44,7 @@ export type PairingMode = "random" | "balanced";
 const W_PARTNER = 1000; // rejouer avec le même partenaire : très pénalisé
 const W_OPPONENT = 40; // raffronter le même adversaire : pénalisé
 const W_BALANCE = 12; // mode équilibré : écart de niveau entre équipes
+const W_SIDE = 60; // mode équilibré : équipe gauche/gauche ou droite/droite
 
 interface HistoryState {
   partner: Map<string, number>;
@@ -58,12 +65,17 @@ function shuffled<T>(arr: T[]): T[] {
   return a;
 }
 
+/** Deux préférences strictes identiques dans la même équipe ? */
+export function sideConflict(a?: EngineSide | null, b?: EngineSide | null): boolean {
+  return a != null && a !== "both" && a === b;
+}
+
 /** Coût d'un match donné selon l'historique et le mode d'équilibrage. */
 function matchCost(
   m: PlannedMatch,
   h: HistoryState,
   mode: PairingMode,
-  levelOf: Map<string, number>,
+  infoOf: Map<string, EnginePlayer>,
 ): number {
   const p1 = h.partner.get(pairKey(m.team1[0], m.team1[1])) ?? 0;
   const p2 = h.partner.get(pairKey(m.team2[0], m.team2[1])) ?? 0;
@@ -77,9 +89,14 @@ function matchCost(
   }
 
   if (mode === "balanced") {
-    const l1 = (levelOf.get(m.team1[0]) ?? 5) + (levelOf.get(m.team1[1]) ?? 5);
-    const l2 = (levelOf.get(m.team2[0]) ?? 5) + (levelOf.get(m.team2[1]) ?? 5);
+    const level = (id: string) => infoOf.get(id)?.level ?? 5;
+    const l1 = level(m.team1[0]) + level(m.team1[1]);
+    const l2 = level(m.team2[0]) + level(m.team2[1]);
     cost += W_BALANCE * Math.abs(l1 - l2);
+
+    const side = (id: string) => infoOf.get(id)?.side;
+    if (sideConflict(side(m.team1[0]), side(m.team1[1]))) cost += W_SIDE;
+    if (sideConflict(side(m.team2[0]), side(m.team2[1]))) cost += W_SIDE;
   }
   return cost;
 }
@@ -88,9 +105,9 @@ function roundCost(
   matches: PlannedMatch[],
   h: HistoryState,
   mode: PairingMode,
-  levelOf: Map<string, number>,
+  infoOf: Map<string, EnginePlayer>,
 ): number {
-  return matches.reduce((s, m) => s + matchCost(m, h, mode, levelOf), 0);
+  return matches.reduce((s, m) => s + matchCost(m, h, mode, infoOf), 0);
 }
 
 /** Meilleur des 3 découpages possibles d'un groupe de 4 joueurs en 2 équipes. */
@@ -99,7 +116,7 @@ function bestSplit(
   court: number,
   h: HistoryState,
   mode: PairingMode,
-  levelOf: Map<string, number>,
+  infoOf: Map<string, EnginePlayer>,
 ): PlannedMatch {
   const [a, b, c, d] = four;
   const splits: PlannedMatch[] = [
@@ -110,7 +127,7 @@ function bestSplit(
   let best = splits[0];
   let bestCost = Infinity;
   for (const s of splits) {
-    const cost = matchCost(s, h, mode, levelOf);
+    const cost = matchCost(s, h, mode, infoOf);
     if (cost < bestCost) {
       bestCost = cost;
       best = s;
@@ -163,7 +180,7 @@ function generateRound(
   h: HistoryState,
   restarts = 60,
 ): PlannedRound {
-  const levelOf = new Map(players.map((p) => [p.id, p.level]));
+  const infoOf = new Map(players.map((p) => [p.id, p]));
   const capacity = Math.min(courts * 4, Math.floor(players.length / 4) * 4);
   const resting = pickResting(players, players.length - capacity, h);
   const restingSet = new Set(resting);
@@ -176,12 +193,12 @@ function generateRound(
     const order = shuffled(active);
     const matches: PlannedMatch[] = [];
     for (let i = 0; i < order.length; i += 4) {
-      matches.push(bestSplit(order.slice(i, i + 4), matches.length + 1, h, mode, levelOf));
+      matches.push(bestSplit(order.slice(i, i + 4), matches.length + 1, h, mode, infoOf));
     }
 
     // Hill-climbing : on tente tous les échanges de joueurs entre positions.
     let improved = true;
-    let cost = roundCost(matches, h, mode, levelOf);
+    let cost = roundCost(matches, h, mode, infoOf);
     while (improved && cost > 0) {
       improved = false;
       const pos = positions(matches);
@@ -191,13 +208,13 @@ function generateRound(
           const [mj, tj, sj] = pos[j];
           if (mi === mj) continue; // même match : couvert par bestSplit
           const before =
-            matchCost(matches[mi], h, mode, levelOf) + matchCost(matches[mj], h, mode, levelOf);
+            matchCost(matches[mi], h, mode, infoOf) + matchCost(matches[mj], h, mode, infoOf);
           const a = getSlot(matches[mi], ti, si);
           const b = getSlot(matches[mj], tj, sj);
           setSlot(matches[mi], ti, si, b);
           setSlot(matches[mj], tj, sj, a);
           const after =
-            matchCost(matches[mi], h, mode, levelOf) + matchCost(matches[mj], h, mode, levelOf);
+            matchCost(matches[mi], h, mode, infoOf) + matchCost(matches[mj], h, mode, infoOf);
           if (after < before) {
             cost = cost - before + after;
             improved = true;
@@ -214,10 +231,10 @@ function generateRound(
           matches[i].court,
           h,
           mode,
-          levelOf,
+          infoOf,
         );
       }
-      cost = roundCost(matches, h, mode, levelOf);
+      cost = roundCost(matches, h, mode, infoOf);
     }
 
     if (cost < bestCost) {

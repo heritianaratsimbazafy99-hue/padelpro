@@ -52,5 +52,14 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 
 Le schéma SQL de référence est dans `supabase/migrations/`.
 
+### E2E (Playwright + mock Supabase local)
+
+```bash
+node scripts/supabase-mock.mjs 4545 &
+NEXT_PUBLIC_SUPABASE_URL=http://localhost:4545 npm run build
+npx next start -p 3200 &
+node scripts/e2e.mjs
+```
+
 Les emails d'authentification Supabase sont envoyés via SMTP Resend en production.
 Les templates actifs sont versionnés dans `supabase/email-templates/`.

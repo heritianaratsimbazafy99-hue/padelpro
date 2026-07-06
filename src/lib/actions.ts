@@ -27,7 +27,11 @@ function roundsToRows(eventId: string, rounds: PlannedRound[]) {
 /** Lance l'événement : génère les matchs selon le format et passe en "active". */
 export async function startEvent(event: PadelEvent, players: EventPlayer[]): Promise<string | null> {
   const supabase = createClient();
-  const enginePlayers = players.map((p) => ({ id: p.id, level: p.level }));
+  const enginePlayers = players.map((p) => ({
+    id: p.id,
+    level: p.level,
+    side: p.preferred_side,
+  }));
   const { courts, rounds, pairing } = event.settings;
 
   let rows: Array<Record<string, unknown>> = [];
@@ -84,8 +88,12 @@ export async function nextMexicanoRound(
 ): Promise<string | null> {
   const supabase = createClient();
   const standings = computeStandings(players, matches);
-  const levelOf = new Map(players.map((p) => [p.id, p.level]));
-  const ranked = standings.map((s) => ({ id: s.playerId, level: levelOf.get(s.playerId) ?? 5 }));
+  const infoOf = new Map(players.map((p) => [p.id, p]));
+  const ranked = standings.map((s) => ({
+    id: s.playerId,
+    level: infoOf.get(s.playerId)?.level ?? 5,
+    side: infoOf.get(s.playerId)?.preferred_side,
+  }));
 
   // Reconstruit l'historique (byes) à partir des matchs déjà joués.
   const playedRounds: PlannedRound[] = [];

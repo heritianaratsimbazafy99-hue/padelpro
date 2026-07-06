@@ -26,6 +26,8 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
   });
   const [meId, setMeId] = useState<string | null>(null);
   const [identityLoaded, setIdentityLoaded] = useState(false);
+  /* Photos de profil des joueurs ayant lié leur compte (profile_id → url). */
+  const [avatars, setAvatars] = useState<Map<string, string>>(new Map());
   const [tab, setTab] = useState<Tab>("matches");
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null);
   const [toast, setToast] = useState<ToastData | null>(null);
@@ -69,6 +71,26 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     const map = new Map(players.map((p) => [p.id, p.display_name]));
     return (pid: string | null) => (pid ? (map.get(pid) ?? null) : null);
   }, [players]);
+
+  // Photos de profil des joueurs qui ont lié leur compte (fiches publiques).
+  const claimedIds = useMemo(
+    () =>
+      [...new Set(players.map((p) => p.profile_id).filter((id): id is string => !!id))].sort(),
+    [players],
+  );
+  useEffect(() => {
+    if (claimedIds.length === 0) return;
+    (async () => {
+      const { data } = await supabase.from("profiles").select("id, avatar_url").in("id", claimedIds);
+      setAvatars(
+        new Map(
+          ((data ?? []) as Array<{ id: string; avatar_url: string | null }>)
+            .filter((p) => p.avatar_url)
+            .map((p) => [p.id, p.avatar_url!]),
+        ),
+      );
+    })();
+  }, [claimedIds, supabase]);
 
   // Identité : localStorage, sinon fiche déjà liée au compte connecté.
   useEffect(() => {
@@ -132,6 +154,9 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     );
   }
 
+  const avatarOf = (p: { profile_id: string | null }) =>
+    p.profile_id ? avatars.get(p.profile_id) : undefined;
+
   const me = players.find((p) => p.id === meId);
   const myNextMatch = meId
     ? matches.find(
@@ -161,7 +186,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
                   onClick={() => selectIdentity(p.id)}
                   className="w-full flex items-center gap-3 bg-surface border border-border rounded-(--radius-card) px-4 py-3.5 cursor-pointer card-lift"
                 >
-                  <Avatar name={p.display_name} />
+                  <Avatar name={p.display_name} src={avatarOf(p)} />
                   <span className="flex-1 text-left font-bold">{p.display_name}</span>
                   <UserCheck className="size-5 text-ink-faint" aria-hidden />
                 </button>
@@ -199,7 +224,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
             <span className="text-sm font-semibold text-ink-muted group-hover:text-ink transition-colors">
               {me.display_name}
             </span>
-            <Avatar name={me.display_name} size="sm" />
+            <Avatar name={me.display_name} src={avatarOf(me)} size="sm" />
           </button>
         </div>
       </header>

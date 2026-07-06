@@ -1,59 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ElementType,
-  type ReactNode,
-} from "react";
-
-/**
- * Révélation au scroll : ajoute .is-inview quand l'élément entre dans le
- * viewport. Combiné aux classes CSS .reveal / .stagger de globals.css.
- */
-export function Reveal({
-  as: Tag = "div",
-  className = "",
-  children,
-  once = true,
-}: {
-  as?: ElementType;
-  className?: string;
-  children: ReactNode;
-  once?: boolean;
-}) {
-  const ref = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-inview");
-            if (once) io.unobserve(entry.target);
-          } else if (!once) {
-            entry.target.classList.remove("is-inview");
-          }
-        }
-      },
-      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
-    );
-    // La cible et ses enfants directs marqués .reveal
-    const targets = [el, ...Array.from(el.querySelectorAll(":scope > .reveal"))];
-    targets.forEach((t) => io.observe(t));
-    return () => io.disconnect();
-  }, [once]);
-
-  return (
-    <Tag ref={ref} className={className}>
-      {children}
-    </Tag>
-  );
-}
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Compteur animé : monte de 0 à `value` quand il devient visible. */
 export function CountUp({
