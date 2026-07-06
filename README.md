@@ -52,6 +52,5 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 
 Le schéma SQL de référence est dans `supabase/migrations/`.
 
-> Note : la confirmation d'email est activée par défaut sur Supabase. Pour des inscriptions
-> instantanées : Dashboard Supabase → Authentication → Sign In / Up → Email → désactiver
-> « Confirm email ».
+Les emails d'authentification Supabase sont envoyés via SMTP Resend en production.
+Les templates actifs sont versionnés dans `supabase/email-templates/`.

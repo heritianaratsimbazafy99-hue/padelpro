@@ -69,7 +69,7 @@ export default function SignupPage() {
               <h1 className="text-xl font-extrabold">Vérifie ta boîte mail</h1>
               <p className="text-sm text-ink-muted leading-relaxed">
                 Un lien de confirmation a été envoyé à <strong className="text-ink">{email}</strong>.
-                Clique dessus puis connecte-toi.
+                Clique dessus pour activer ton compte.
               </p>
               <Link href="/login" className="text-court font-semibold text-sm hover:underline">
                 Aller à la connexion

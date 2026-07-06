@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { CheckCircle2, ShieldAlert } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Field, Input } from "@/components/ui";
 import { Logo } from "@/components/logo";
@@ -14,6 +15,9 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const confirmed = params.get("confirmed") === "1";
+  const passwordUpdated = params.get("passwordUpdated") === "1";
+  const authError = params.get("authError");
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -36,6 +40,29 @@ function LoginForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      {(confirmed || passwordUpdated || authError) && (
+        <div
+          role={authError ? "alert" : "status"}
+          className={`flex gap-3 rounded-xl border p-3 text-sm ${
+            authError
+              ? "border-danger/25 bg-danger/10 text-danger"
+              : "border-success/25 bg-success/10 text-success"
+          }`}
+        >
+          {authError ? (
+            <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+          ) : (
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />
+          )}
+          <span>
+            {authError
+              ? "Le lien n'est plus valide. Demande un nouveau lien si besoin."
+              : passwordUpdated
+                ? "Mot de passe mis à jour. Connecte-toi avec le nouveau."
+                : "Email confirmé. Tu peux maintenant te connecter."}
+          </span>
+        </div>
+      )}
       <Field label="Email" htmlFor="email">
         <Input
           id="email"
@@ -58,6 +85,11 @@ function LoginForm() {
           placeholder="••••••••"
         />
       </Field>
+      <div className="-mt-2 flex justify-end">
+        <Link href="/forgot-password" className="text-sm font-semibold text-lime hover:underline">
+          Mot de passe oublié ?
+        </Link>
+      </div>
       <Button type="submit" size="lg" full loading={loading}>
         Se connecter
       </Button>

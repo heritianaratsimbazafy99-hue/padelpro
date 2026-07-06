@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reinitialise ton mot de passe</title>
+  </head>
+  <body style="margin:0;background:#f8fafc;color:#1e293b;font-family:Arial,Helvetica,sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+      Choisis un nouveau mot de passe PadelPro avec ce lien securise.
+    </div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+            <tr>
+              <td style="background:#0b1220;padding:28px 28px 24px;">
+                <p style="margin:0 0 14px;color:#c8f542;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;">
+                  PadelPro
+                </p>
+                <h1 style="margin:0;color:#ffffff;font-size:28px;line-height:1.22;font-weight:800;">
+                  Reinitialise ton mot de passe
+                </h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px;">
+                <p style="margin:0 0 18px;color:#334155;font-size:16px;line-height:1.6;">
+                  Nous avons recu une demande de reinitialisation. Utilise le bouton ci-dessous pour
+                  choisir un nouveau mot de passe.
+                </p>
+                <p style="margin:0 0 24px;">
+                  <a
+                    href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password"
+                    style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:800;font-size:15px;line-height:1;padding:15px 20px;border-radius:8px;"
+                  >
+                    Choisir un nouveau mot de passe
+                  </a>
+                </p>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+                  <tr>
+                    <td style="padding:14px 16px;">
+                      <p style="margin:0;color:#9a3412;font-size:13px;line-height:1.55;font-weight:700;">
+                        Tu n'es pas a l'origine de cette demande ?
+                      </p>
+                      <p style="margin:6px 0 0;color:#9a3412;font-size:13px;line-height:1.55;">
+                        Ignore cet email. Ton mot de passe actuel ne change pas tant que ce lien n'est pas utilise.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:16px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;">
+                  <tr>
+                    <td style="padding:14px 16px;">
+                      <p style="margin:0;color:#475569;font-size:13px;line-height:1.55;">
+                        Si le bouton ne fonctionne pas, copie ce lien dans ton navigateur :
+                      </p>
+                      <p style="margin:8px 0 0;word-break:break-all;color:#1d4ed8;font-size:12px;line-height:1.5;">
+                        {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/auth/update-password
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px 28px;border-top:1px solid #e2e8f0;">
+                <p style="margin:0;color:#64748b;font-size:12px;line-height:1.55;">
+                  Pour ta securite, ce lien est personnel et expire automatiquement.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
