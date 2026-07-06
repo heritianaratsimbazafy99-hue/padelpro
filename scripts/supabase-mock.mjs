@@ -318,6 +318,10 @@ const server = http.createServer(async (req, res) => {
     db.profiles.push({
       id: user.id,
       display_name: body.data?.display_name ?? body.email.split("@")[0],
+      bio: null,
+      preferred_side: null,
+      racket: null,
+      avatar_url: null,
       created_at: now(),
     });
     const session = makeSession(user);

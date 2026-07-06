@@ -265,6 +265,23 @@ await check("le profil affiche stats et historique", async () => {
   await shot("profil");
 });
 
+/* 9bis. Fiche joueur gamifiée ---------------------------------------------- */
+await check("la fiche joueur (bio, côté, raquette) s'enregistre et s'affiche", async () => {
+  await page.fill("#bio", "Bandeja létale, lobs vicieux.");
+  await page.getByRole("radio", { name: "Gauche" }).click();
+  await page.fill("#racket", "Bullpadel Vertex 04");
+  await page.getByRole("button", { name: "Enregistrer ma fiche" }).click();
+  await expectVisible(page.getByRole("button", { name: "Enregistré" }));
+  // La carte joueur reflète la fiche
+  await expectVisible(page.getByText("« Bandeja létale, lobs vicieux. »"));
+  await expectVisible(page.getByText("Côté gauche"));
+  await expectVisible(page.getByText("Bullpadel Vertex 04"));
+  await shot("fiche-joueur");
+  // Persistance après rechargement
+  await page.reload({ waitUntil: "networkidle" });
+  await expectVisible(page.getByText("Côté gauche"), 10000);
+});
+
 /* 10. Logout / login ------------------------------------------------------- */
 await check("déconnexion puis reconnexion", async () => {
   const btn = page.getByRole("button", { name: /Se déconnecter|Déconnexion/ });

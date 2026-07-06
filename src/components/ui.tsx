@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
+import { forwardRef, useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 function cx(...parts: Array<string | false | null | undefined>) {
@@ -101,6 +101,21 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   ),
 );
 Input.displayName = "Input";
+
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  ({ className, ...props }, ref) => (
+    <textarea
+      ref={ref}
+      className={cx(
+        "w-full min-h-24 px-4 py-3 rounded-(--radius-field) bg-surface-2 border border-border text-ink placeholder:text-ink-faint resize-y",
+        "transition-colors duration-150 focus:outline-none focus:border-court/50 focus:ring-2 focus:ring-court/15",
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+Textarea.displayName = "Textarea";
 
 export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
   ({ className, children, ...props }, ref) => (
@@ -295,7 +310,7 @@ export function Badge({
   );
 }
 
-/* ---------- Avatar (initials) ---------- */
+/* ---------- Avatar (photo ou initiales) ---------- */
 
 const avatarPalette = [
   "bg-lime/50 text-court",
@@ -315,11 +330,37 @@ export function initialsOf(name: string) {
     .join("");
 }
 
-export function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
+export function Avatar({
+  name,
+  src,
+  size = "md",
+  className,
+}: {
+  name: string;
+  /** Photo de profil ; à défaut, initiales colorées. */
+  src?: string | null;
+  size?: "sm" | "md" | "lg" | "xl";
+  className?: string;
+}) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
   const palette = avatarPalette[Math.abs(hash) % avatarPalette.length];
-  const sizes = { sm: "size-7 text-[0.625rem]", md: "size-9 text-xs", lg: "size-12 text-sm" };
+  const sizes = {
+    sm: "size-7 text-[0.625rem]",
+    md: "size-9 text-xs",
+    lg: "size-12 text-sm",
+    xl: "size-24 text-2xl",
+  };
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- URL Supabase Storage dynamique
+      <img
+        src={src}
+        alt={`Photo de ${name}`}
+        className={cx("rounded-full object-cover shrink-0 bg-surface-2", sizes[size], className)}
+      />
+    );
+  }
   return (
     <span
       aria-hidden
@@ -327,6 +368,7 @@ export function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md"
         "inline-flex items-center justify-center rounded-full font-bold shrink-0",
         palette,
         sizes[size],
+        className,
       )}
     >
       {initialsOf(name)}
