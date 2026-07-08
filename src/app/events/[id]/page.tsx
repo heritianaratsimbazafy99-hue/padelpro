@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useMemo, useRef, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -10,11 +10,13 @@ import {
   Plus,
   QrCode,
   Trash2,
+  UserCheck,
   Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useEvent } from "@/lib/use-event";
 import { completeEvent, deleteEvent, nextMexicanoRound, startEvent } from "@/lib/actions";
+import { getPlayerReporterName, resolveEventPlayerId } from "@/lib/event-identity";
 import { FORMAT_LABELS, friendlyError } from "@/lib/utils";
 import type { Match } from "@/lib/types";
 import { AppPage, BottomNav, TopBar } from "@/components/shell";
@@ -42,6 +44,7 @@ type Tab = "matches" | "standings" | "players";
 export default function EventAdminPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
   const { event, players, matches, loading, notFound, refresh, reportScore } = useEvent({ id });
   const [tab, setTab] = useState<Tab>("matches");
   const [showQR, setShowQR] = useState(false);
@@ -51,6 +54,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
   const [toast, setToast] = useState<ToastData | null>(null);
   const [confirmAction, setConfirmAction] = useState<"complete" | "delete" | null>(null);
   const [newPlayer, setNewPlayer] = useState("");
+  const [organizerPlayerId, setOrganizerPlayerId] = useState<string | null>(null);
   const [viewRound, setViewRound] = useState<number | null>(null);
   const [roundAnim, setRoundAnim] = useState<"l" | "r" | null>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -59,10 +63,32 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
     const map = new Map(players.map((p) => [p.id, p.display_name]));
     return (pid: string | null) => (pid ? (map.get(pid) ?? null) : null);
   }, [players]);
+  const organizerStorageKey = event ? `padelpro:player:${event.id}` : null;
+  const organizerPlayer = organizerPlayerId
+    ? (players.find((player) => player.id === organizerPlayerId) ?? null)
+    : null;
+  const reporterName = getPlayerReporterName(players, organizerPlayerId, "organisateur");
 
   useEscapeClose(confirmAction !== null, () => setConfirmAction(null));
   useEscapeClose(showQR, () => setShowQR(false));
   const confirmTrapRef = useFocusTrap<HTMLDivElement>(confirmAction !== null);
+
+  // Identité joueur de l'organisateur : même stockage/claim que la page QR.
+  useEffect(() => {
+    if (!event) return;
+    let cancelled = false;
+    (async () => {
+      const stored = organizerStorageKey ? localStorage.getItem(organizerStorageKey) : null;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (cancelled) return;
+      setOrganizerPlayerId(resolveEventPlayerId(players, user?.id ?? null, stored));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [event, organizerStorageKey, players, supabase]);
 
   /* Navigation entre rounds : clic sur les pastilles ou swipe horizontal
      (mobile) — le contenu glisse dans le sens du geste. */
@@ -75,7 +101,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
   /* Optimistic UI : le score s'applique localement tout de suite, le toast
      confirme (ou signale le rollback en cas d'erreur serveur). */
   async function handleReport(match: Match, s1: number, s2: number) {
-    const err = await reportScore(match, s1, s2, "organisateur");
+    const err = await reportScore(match, s1, s2, reporterName);
     setToast(
       err
         ? { message: friendlyError(err), tone: "danger" }
@@ -143,7 +169,6 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
     e.preventDefault();
     const name = newPlayer.trim();
     if (!name) return;
-    const supabase = createClient();
     const { error } = await supabase.from("event_players").insert({
       event_id: event!.id,
       display_name: name,
@@ -158,6 +183,35 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
     setNewPlayer("");
     setError(null);
     refresh();
+  }
+
+  async function selectOrganizerPlayer(playerId: string | null) {
+    const selected = playerId ? players.find((player) => player.id === playerId) : null;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (selected?.profile_id && user && selected.profile_id !== user.id) {
+      setToast({ message: "Ce nom est déjà lié à un autre compte.", tone: "danger" });
+      return;
+    }
+
+    setOrganizerPlayerId(playerId);
+    if (organizerStorageKey) {
+      if (playerId) localStorage.setItem(organizerStorageKey, playerId);
+      else localStorage.removeItem(organizerStorageKey);
+    }
+
+    if (!playerId || !event || !user) return;
+    const { error } = await supabase.rpc("claim_player", {
+      p_player_id: playerId,
+      p_share_code: event.share_code,
+    });
+    if (error) {
+      setToast({ message: friendlyError(error.message), tone: "danger" });
+      return;
+    }
+    await refresh();
   }
 
   return (
@@ -194,6 +248,55 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
           <p role="alert" className="text-sm text-danger font-medium mb-4">
             {error}
           </p>
+        )}
+
+        {players.length > 0 && (
+          <section className="bg-surface border border-border rounded-(--radius-card) p-4 mb-5 animate-fade-up">
+            <div className="flex items-start gap-3 mb-3">
+              <span className="size-10 rounded-xl bg-lime/15 border border-lime/25 flex items-center justify-center text-court shrink-0">
+                <UserCheck className="size-5" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-sm font-extrabold">Jouer comme participant</h2>
+                <p className="text-sm text-ink-muted leading-relaxed">
+                  {organizerPlayer
+                    ? `Tu es sélectionné comme ${organizerPlayer.display_name}.`
+                    : "Choisis ton nom pour voir tes matchs et annoncer les scores en tant que joueur."}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              {players.map((player) => {
+                const selected = organizerPlayerId === player.id;
+                return (
+                  <button
+                    key={player.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => selectOrganizerPlayer(player.id)}
+                    className={`shrink-0 h-12 max-w-56 flex items-center gap-2 rounded-full border pl-2 pr-3 text-sm font-semibold cursor-pointer transition-colors ${
+                      selected
+                        ? "bg-lime text-on-lime border-lime"
+                        : "bg-surface-2 text-ink-muted border-border hover:text-ink hover:border-border-strong"
+                    }`}
+                  >
+                    <Avatar name={player.display_name} size="sm" />
+                    <span className="truncate">{player.display_name}</span>
+                    {selected && <CheckCircle2 className="size-4 shrink-0" aria-hidden />}
+                  </button>
+                );
+              })}
+              {organizerPlayerId && (
+                <button
+                  type="button"
+                  onClick={() => selectOrganizerPlayer(null)}
+                  className="shrink-0 h-12 rounded-full border border-border px-4 text-sm font-semibold text-ink-muted bg-surface-2 hover:text-ink cursor-pointer transition-colors"
+                >
+                  Aucun
+                </button>
+              )}
+            </div>
+          </section>
         )}
 
         {isDone && <Podium event={event} players={players} matches={matches} />}
@@ -240,7 +343,6 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                   <button
                     aria-label={`Retirer ${p.display_name}`}
                     onClick={async () => {
-                      const supabase = createClient();
                       await supabase.from("event_players").delete().eq("id", p.id);
                       refresh();
                     }}
@@ -293,6 +395,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
               <BracketView
                 matches={matches}
                 playerName={playerName}
+                meId={organizerPlayerId}
                 onSelect={isActive ? (m) => setScoringMatch(m) : undefined}
               />
             )}
@@ -350,6 +453,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                       <MatchCard
                         match={m}
                         playerName={playerName}
+                        meId={organizerPlayerId}
                         onClick={isActive ? () => setScoringMatch(m) : undefined}
                       />
                     </div>
@@ -390,7 +494,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                   body="Pour un tournoi, la progression se lit dans le tableau. Le podium s'affichera à la fin."
                 />
               ) : (
-                <Standings players={players} matches={matches} />
+                <Standings players={players} matches={matches} meId={organizerPlayerId} />
               ))}
 
             {tab === "players" && (
