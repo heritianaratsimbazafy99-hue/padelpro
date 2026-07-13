@@ -13,6 +13,14 @@ export interface FixedTeam {
 export type AssignedEnginePlayer = EnginePlayer & { teamNumber: number | null };
 export type TeamAssignments = Record<string, number>;
 
+function assertUniquePlayerIds(ids: readonly string[]): void {
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) throw new Error(`Identifiant de joueur dupliqué : ${id}.`);
+    seen.add(id);
+  }
+}
+
 function shuffled<T>(values: readonly T[], random: RandomSource): T[] {
   const copy = [...values];
   for (let index = copy.length - 1; index > 0; index--) {
@@ -22,29 +30,91 @@ function shuffled<T>(values: readonly T[], random: RandomSource): T[] {
   return copy;
 }
 
+/** Affectation minimale carrée en O(n³), déterministe à coût égal. */
+function minimumCostAssignment(costs: readonly (readonly number[])[]): number[] {
+  const size = costs.length;
+  const rowPotential = Array<number>(size + 1).fill(0);
+  const columnPotential = Array<number>(size + 1).fill(0);
+  const matchedRow = Array<number>(size + 1).fill(0);
+  const previousColumn = Array<number>(size + 1).fill(0);
+
+  for (let row = 1; row <= size; row++) {
+    matchedRow[0] = row;
+    let currentColumn = 0;
+    const minimum = Array<number>(size + 1).fill(Infinity);
+    const used = Array<boolean>(size + 1).fill(false);
+
+    do {
+      used[currentColumn] = true;
+      const currentRow = matchedRow[currentColumn];
+      let delta = Infinity;
+      let nextColumn = 0;
+      for (let column = 1; column <= size; column++) {
+        if (used[column]) continue;
+        const candidate =
+          costs[currentRow - 1][column - 1] -
+          rowPotential[currentRow] -
+          columnPotential[column];
+        if (candidate < minimum[column]) {
+          minimum[column] = candidate;
+          previousColumn[column] = currentColumn;
+        }
+        if (minimum[column] < delta) {
+          delta = minimum[column];
+          nextColumn = column;
+        }
+      }
+      for (let column = 0; column <= size; column++) {
+        if (used[column]) {
+          rowPotential[matchedRow[column]] += delta;
+          columnPotential[column] -= delta;
+        } else {
+          minimum[column] -= delta;
+        }
+      }
+      currentColumn = nextColumn;
+    } while (matchedRow[currentColumn] !== 0);
+
+    do {
+      const nextColumn = previousColumn[currentColumn];
+      matchedRow[currentColumn] = matchedRow[nextColumn];
+      currentColumn = nextColumn;
+    } while (currentColumn !== 0);
+  }
+
+  const assignment = Array<number>(size);
+  for (let column = 1; column <= size; column++) {
+    assignment[matchedRow[column] - 1] = column - 1;
+  }
+  return assignment;
+}
+
+function balancedPairs(players: readonly EnginePlayer[]): Array<[EnginePlayer, EnginePlayer]> {
+  const ranked = [...players].sort((a, b) => b.level - a.level);
+  const teamCount = ranked.length / 2;
+  const strongHalf = ranked.slice(0, teamCount);
+  const weakHalf = ranked.slice(teamCount).reverse();
+  const maximumRankCost = teamCount * Math.max(0, teamCount - 1);
+  const conflictPenalty = maximumRankCost + 1;
+  const costs = strongHalf.map((strong, strongIndex) =>
+    weakHalf.map((weak, weakIndex) =>
+      (sideConflict(strong.side, weak.side) ? conflictPenalty : 0) +
+      Math.abs(strongIndex - weakIndex),
+    ),
+  );
+  const assignment = minimumCostAssignment(costs);
+  return strongHalf.map((strong, index) => [strong, weakHalf[assignment[index]]]);
+}
+
 function pairPool(
   players: readonly EnginePlayer[],
   mode: PairingMode,
   random: RandomSource,
 ): Array<[EnginePlayer, EnginePlayer]> {
-  const pool = mode === "random"
-    ? shuffled(players, random)
-    : [...players].sort((a, b) => b.level - a.level);
+  if (mode === "balanced") return balancedPairs(players);
+  const pool = shuffled(players, random);
   const pairs: Array<[EnginePlayer, EnginePlayer]> = [];
-  while (pool.length > 0) {
-    const first = pool.shift()!;
-    let partnerIndex = 0;
-    if (mode === "balanced") {
-      partnerIndex = pool.length - 1;
-      for (let index = pool.length - 1; index >= 0; index--) {
-        if (!sideConflict(first.side, pool[index].side)) {
-          partnerIndex = index;
-          break;
-        }
-      }
-    }
-    pairs.push([first, pool.splice(partnerIndex, 1)[0]]);
-  }
+  while (pool.length > 0) pairs.push([pool.shift()!, pool.shift()!]);
   return pairs;
 }
 
@@ -53,6 +123,7 @@ export function composeFixedTeams(
   mode: PairingMode,
   random: RandomSource = Math.random,
 ): FixedTeam[] {
+  assertUniquePlayerIds(players.map((player) => player.id));
   if (players.length < 4 || players.length % 2 !== 0) {
     throw new Error("Il faut un nombre pair de joueurs (minimum 4).");
   }
@@ -63,6 +134,7 @@ export function composeFixedTeams(
 }
 
 export function assignmentsFromTeams(teams: readonly FixedTeam[]): TeamAssignments {
+  assertUniquePlayerIds(teams.flatMap((team) => team.playerIds));
   return Object.fromEntries(
     teams.flatMap((team) => team.playerIds.map((id) => [id, team.teamNumber] as const)),
   );
@@ -81,6 +153,7 @@ export function composeTeams(
 }
 
 export function fixedTeamsFromAssignments(players: readonly AssignedEnginePlayer[]): FixedTeam[] {
+  assertUniquePlayerIds(players.map((player) => player.id));
   if (players.length < 4 || players.length % 2 !== 0) {
     throw new Error("Il faut un nombre pair de joueurs (minimum 4).");
   }

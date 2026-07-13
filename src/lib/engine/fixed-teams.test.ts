@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  assignmentsFromTeams,
   composeFixedTeams,
   fixedTeamsFromAssignments,
   swapAssignments,
@@ -64,6 +65,59 @@ test("balanced composition avoids identical strict sides when possible", () => {
   );
   const sideOf = new Map([["g1", "left"], ["g2", "left"], ["d1", "right"], ["d2", "right"]]);
   assert.ok(teams.every((team) => sideOf.get(team.playerIds[0]) !== sideOf.get(team.playerIds[1])));
+});
+
+test("balanced composition minimizes side conflicts across all teams", () => {
+  const teams = composeFixedTeams(
+    [
+      { id: "F10", level: 10, side: "both" },
+      { id: "L9", level: 9, side: "left" },
+      { id: "L8", level: 8, side: "left" },
+      { id: "L7", level: 7, side: "left" },
+      { id: "F6", level: 6, side: "both" },
+      { id: "R1", level: 1, side: "right" },
+    ],
+    "balanced",
+  );
+  const leftIds = new Set(["L9", "L8", "L7"]);
+  assert.equal(
+    teams.filter((team) => team.playerIds.every((id) => leftIds.has(id))).length,
+    0,
+  );
+});
+
+test("fixed composition rejects duplicate player identifiers", () => {
+  assert.throws(
+    () => composeFixedTeams([
+      { id: "a", level: 8 },
+      { id: "a", level: 7 },
+      { id: "b", level: 3 },
+      { id: "c", level: 2 },
+    ], "balanced"),
+    /identifiant.*dupliqu/i,
+  );
+});
+
+test("persisted assignments reject duplicate player identifiers", () => {
+  assert.throws(
+    () => fixedTeamsFromAssignments([
+      { id: "a", level: 8, teamNumber: 1 },
+      { id: "b", level: 7, teamNumber: 1 },
+      { id: "a", level: 3, teamNumber: 2 },
+      { id: "c", level: 2, teamNumber: 2 },
+    ]),
+    /identifiant.*dupliqu/i,
+  );
+});
+
+test("team assignments reject duplicate player identifiers", () => {
+  assert.throws(
+    () => assignmentsFromTeams([
+      { teamNumber: 1, playerIds: ["a", "b"] },
+      { teamNumber: 2, playerIds: ["a", "c"] },
+    ]),
+    /identifiant.*dupliqu/i,
+  );
 });
 
 test("random fixed composition is reproducible with an injected source", () => {
