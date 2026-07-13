@@ -16,11 +16,11 @@ temps réel, comptes joueurs avec statistiques.
 
 | Format | Fonctionnement |
 |---|---|
-| **Americano** | Tournoi individuel. Tous les rounds sont générés au lancement avec une rotation optimisée : aucun partenaire répété tant qu'une alternative existe, adversaires variés, repos répartis (écart max 1). Score individuel = points cumulés. |
+| **Americano** | Deux variantes : **Individuel · remixé** génère automatiquement des cycles équitables avec partenaires variés, repos répartis et classement individuel ; **Par équipes · fixe** conserve les binômes composés manuellement, aléatoirement ou selon le niveau, puis joue un round-robin complet avec classement collectif. Une fois un cycle terminé, l'organisateur peut choisir **Ajouter un cycle** pour prolonger l'événement sans perdre les scores précédents. |
 | **Mexicano** | Round 1 aléatoire ou par niveau, puis chaque round est formé d'après le classement : dans chaque groupe de 4, le 1ᵉʳ joue avec le 4ᵉ contre 2ᵉ + 3ᵉ. |
 | **Tournoi** | Équipes fixes (composition aléatoire ou équilibrée par niveau), tableau à élimination directe avec placement standard des têtes de série et byes automatiques. Le vainqueur est propagé dans le bracket par la base (RPC). |
 
-Le moteur (`src/lib/engine/`) est couvert par des tests : `node --test src/lib/engine/engine.test.ts`.
+Le moteur (`src/lib/engine/`) et les contrats applicatifs sont couverts par `npm test`.
 
 ## Flux QR
 
@@ -56,9 +56,20 @@ Le schéma SQL de référence est dans `supabase/migrations/`.
 
 ```bash
 node scripts/supabase-mock.mjs 4545 &
-NEXT_PUBLIC_SUPABASE_URL=http://localhost:4545 npm run build
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:4545 npm run build
 npx next start -p 3200 &
 node scripts/e2e.mjs
+node scripts/e2e-team-cycles.mjs
+```
+
+### Vérifications
+
+```bash
+npm test
+node --test scripts/supabase-mock.test.mjs
+npm run lint
+npm run build
+node scripts/e2e-team-cycles.mjs
 ```
 
 Les emails d'authentification Supabase sont envoyés via SMTP Resend en production.

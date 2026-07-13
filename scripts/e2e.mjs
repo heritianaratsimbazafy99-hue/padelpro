@@ -4,6 +4,7 @@
  * lancement → claim joueur via /join → scores (participant + organisateur) →
  * podium → classement Elo → profil → logout/login.
  */
+import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
 
 const BASE = "http://localhost:3200";
@@ -11,10 +12,54 @@ const SHOTS = process.env.OUT || "shots";
 let step = 0;
 const results = [];
 
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+await mkdir(SHOTS, { recursive: true });
+const browser = await chromium.launch(
+  process.env.PLAYWRIGHT_CHROMIUM_PATH
+    ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
+    : undefined,
+);
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 const pageErrors = [];
+const consoleErrors = [];
+let intentionalRpcFailure = null;
 page.on("pageerror", (e) => pageErrors.push(String(e).slice(0, 200)));
+page.on("console", (message) => {
+  if (message.type() === "error") {
+    consoleErrors.push({
+      text: message.text(),
+      url: message.location().url,
+      intentionalRpcFailure,
+    });
+  }
+});
+
+const MOCK_REALTIME_CONSOLE_ERROR =
+  /^WebSocket connection to 'ws:\/\/127\.0\.0\.1:4545\/realtime\/v1\/websocket\?apikey=[^']+&vsn=2\.0\.0' failed: Connection closed before receiving a handshake response$/;
+const INTENTIONAL_400_CONSOLE_ERROR =
+  /^Failed to load resource: the server responded with a status of 400 \(Bad Request\)$/;
+
+function isExpectedMockRealtimeError(entry) {
+  if (!MOCK_REALTIME_CONSOLE_ERROR.test(entry.text)) return false;
+  try {
+    const location = new URL(entry.url);
+    return (
+      location.origin === BASE &&
+      location.pathname.startsWith("/_next/static/chunks/")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isExpectedIntentionalScoreFailure(entry) {
+  if (entry.intentionalRpcFailure !== "report_score") return false;
+  if (!INTENTIONAL_400_CONSOLE_ERROR.test(entry.text)) return false;
+  try {
+    return new URL(entry.url).pathname === "/rest/v1/rpc/report_score";
+  } catch {
+    return false;
+  }
+}
 
 async function shot(name) {
   step++;
@@ -52,10 +97,6 @@ await check("wizard crée un americano 4 joueurs / 3 rounds", async () => {
   await page.fill("#event-name", "Americano E2E");
   await page.getByRole("button", { name: "Continuer" }).click();
   await expectVisible(page.getByText("Réglages"));
-  // 3 rounds (défaut probable ≠ 3) : on clique − jusqu'à min puis + jusqu'à 3
-  const minus = page.getByRole("button", { name: "Réduire rounds" });
-  for (let i = 0; i < 15; i++) if (await minus.isEnabled()) await minus.click();
-  await page.getByRole("button", { name: "Augmenter rounds" }).click(); // 2 -> 3
   await shot("wizard-step2");
   await page.getByRole("button", { name: "Continuer" }).click();
   await expectVisible(page.getByRole("heading", { name: "Joueurs" }));
@@ -64,6 +105,11 @@ await check("wizard crée un americano 4 joueurs / 3 rounds", async () => {
     await page.click('button[aria-label="Ajouter le joueur"]');
   }
   await expectVisible(page.getByText("4 joueurs").first());
+  await expectVisible(
+    page.getByText("4 joueurs · 3 rounds · 3 matchs et 0 repos par joueur", {
+      exact: true,
+    }),
+  );
   await shot("wizard-step3");
   await page.getByRole("button", { name: "Créer l'événement" }).click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 15000 });
@@ -122,22 +168,20 @@ await check("optimistic UI : rollback propre et feedback quand le RPC échoue", 
       body: JSON.stringify({ message: "panne simulée par l'E2E", code: "P0001" }),
     }),
   );
-  // Ouvre la première carte de match « à jouer » et valide un score
-  const matchButtons = await page.locator("main").getByRole("button").all();
-  for (const b of matchButtons) {
-    const txt = (await b.textContent()) ?? "";
-    if (/&/.test(txt) && !/\d+\s*[–-]\s*\d+/.test(txt) && !/^R\d/.test(txt.trim())) {
-      await b.click();
-      break;
-    }
-  }
+  // La panne 400 suivante est volontaire et sa console.error n'est tolérée
+  // que pendant cette fenêtre, pour cet endpoint précis.
+  intentionalRpcFailure = "report_score";
+  const nextPendingMatch = page.locator('[data-match-status="pending"]').first();
+  await nextPendingMatch.click();
   await expectVisible(page.getByRole("dialog"));
   await page.locator('button[aria-label^="Plus de points"]').first().click();
   await page.getByRole("button", { name: /Valider|Enregistrer/ }).click();
   // Feedback d'erreur (toast rouge) + retour du match à l'état « À jouer »
   await expectVisible(page.getByText("panne simulée par l'E2E"), 5000);
+  await expectVisible(page.locator('[data-match-status="pending"]').first());
   await page.unroute("**/rpc/report_score");
-  await page.waitForTimeout(600);
+  await page.waitForLoadState("networkidle");
+  intentionalRpcFailure = null;
   const pending = await page.locator("main").getByText("À jouer").count();
   if (pending < 1) throw new Error("le rollback n'a pas restauré le match à « À jouer »");
   await shot("rollback-toast");
@@ -203,37 +247,33 @@ await check("l'organisateur complète tous les rounds", async () => {
   for (let round = 1; round <= 3; round++) {
     const tab = page.getByRole("button", { name: new RegExp(`^R${round}`) });
     await tab.click();
-    await page.waitForTimeout(400);
-    // Tous les matchs pending du round
-    for (let guard = 0; guard < 4; guard++) {
-      const pending = page.locator('[data-match-status="pending"], article, .card-lift').filter({
-        hasText: "—",
-      });
-      // Fallback: cliquer sur une MatchCard sans score (bouton contenant "vs" ?) —
-      // on cible les cartes cliquables restantes du round via le texte "pts"
-      const openBtns = page.locator("button", { hasText: "Round" });
-      void pending;
-      void openBtns;
-      const cards = page.locator("main button.w-full, main [role=button]");
-      void cards;
-      // Approche robuste : chercher un bouton de carte match qui n'affiche pas de score "N - N"
-      const matchButtons = await page.locator("main").getByRole("button").all();
-      let opened = false;
-      for (const b of matchButtons) {
-        const txt = (await b.textContent()) ?? "";
-        if (/&/.test(txt) && !/\d+\s*[–-]\s*\d+/.test(txt) && !/^R\d/.test(txt.trim())) {
-          await b.click();
-          opened = true;
-          break;
-        }
-      }
-      if (!opened) break; // plus de match ouvert dans ce round
-      await expectVisible(page.getByRole("dialog"));
-      const plus = page.locator('button[aria-label^="Plus de points"]').first();
-      await plus.click();
-      await page.getByRole("button", { name: /Valider|Enregistrer/ }).click();
-      await page.waitForTimeout(700);
+    await expectVisible(page.locator(`[data-round-number="${round}"]`).first());
+    const nextPendingMatch = page.locator('[data-match-status="pending"]').first();
+    if ((await nextPendingMatch.count()) === 0) continue;
+    const matchId = await nextPendingMatch.getAttribute("data-match-id");
+    if (!matchId) throw new Error(`identifiant stable absent au round ${round}`);
+    await nextPendingMatch.click();
+    await expectVisible(page.getByRole("dialog"));
+    const plus = page.locator('button[aria-label^="Plus de points"]').first();
+    await plus.click();
+    const responsePromise = page.waitForResponse((response) => {
+      const { pathname } = new URL(response.url());
+      return (
+        response.request().method() === "POST" &&
+        pathname === "/rest/v1/rpc/report_score"
+      );
+    });
+    await page.getByRole("button", { name: /Valider|Enregistrer/ }).click();
+    const response = await responsePromise;
+    if (!response.ok()) {
+      throw new Error(`score refusé au round ${round} : HTTP ${response.status()}`);
     }
+    await tab.click();
+    await expectVisible(
+      page.locator(
+        `[data-match-id="${matchId}"][data-match-status="done"]`,
+      ),
+    );
   }
   await shot("event-tous-scores");
 });
@@ -244,10 +284,12 @@ await check("classement live puis podium à la clôture", async () => {
   await expectVisible(page.getByText("Pts", { exact: false }).first());
   await shot("standings");
   await page.getByRole("radio", { name: "Matchs" }).click();
-  await page.getByRole("button", { name: /Terminer et afficher le podium/ }).click();
+  await page
+    .getByRole("button", { name: "Terminer l'événement", exact: true })
+    .click();
   await expectVisible(page.getByRole("dialog"));
   await page.getByRole("button", { name: "Terminer", exact: true }).click();
-  await expectVisible(page.getByText("Terminé"), 10000);
+  await expectVisible(page.getByText("Terminé", { exact: true }), 10000);
   await shot("podium");
 });
 
@@ -316,8 +358,36 @@ await check("reconnexion", async () => {
   await shot("relogin-dashboard");
 });
 
+const expectedIntentionalScoreErrors = consoleErrors.filter((entry) =>
+  isExpectedIntentionalScoreFailure(entry),
+);
+const unexpectedConsoleErrors = consoleErrors.filter(
+  (entry) =>
+    !isExpectedIntentionalScoreFailure(entry) &&
+    !isExpectedMockRealtimeError(entry),
+);
+if (pageErrors.length > 0) {
+  results.push(`❌ erreurs JavaScript page — ${[...new Set(pageErrors)].join(" | ")}`);
+}
+if (expectedIntentionalScoreErrors.length !== 1) {
+  results.push(
+    `❌ fenêtre 400 report_score — ${expectedIntentionalScoreErrors.length} erreur(s) console au lieu d'une`,
+  );
+}
+if (unexpectedConsoleErrors.length > 0) {
+  results.push(
+    `❌ erreurs console — ${unexpectedConsoleErrors
+      .map((entry) => `${entry.text} (${entry.url})`)
+      .join(" | ")}`,
+  );
+}
+
 console.log("\n=== RÉSULTATS E2E ===");
 for (const r of results) console.log(r);
 console.log("\nJS pageerrors:", pageErrors.length ? [...new Set(pageErrors)] : "aucune");
+console.log(
+  "Console errors inattendues:",
+  unexpectedConsoleErrors.length ? unexpectedConsoleErrors : "aucune",
+);
 await browser.close();
 process.exit(results.some((r) => r.startsWith("❌")) ? 1 : 0);

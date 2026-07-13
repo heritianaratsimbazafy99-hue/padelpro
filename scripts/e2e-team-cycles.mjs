@@ -9,6 +9,7 @@
 import { chromium } from "playwright";
 
 const BASE_URL = "http://127.0.0.1:3200";
+const MOCK_URL = "http://127.0.0.1:4545";
 const browser = await chromium.launch(
   process.env.PLAYWRIGHT_CHROMIUM_PATH
     ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }
@@ -24,11 +25,16 @@ const cyclePayloads = [];
 const scorePayloads = [];
 const directRosterMutations = [];
 const directMatchMutations = [];
+let intentionalRpcFailure = null;
 
 page.on("pageerror", (error) => pageErrors.push(String(error)));
 page.on("console", (message) => {
   if (message.type() === "error") {
-    consoleErrors.push({ text: message.text(), url: message.location().url });
+    consoleErrors.push({
+      text: message.text(),
+      url: message.location().url,
+      intentionalRpcFailure,
+    });
   }
 });
 page.on("request", (request) => {
@@ -82,6 +88,67 @@ const waitForRpcResponse = (name) =>
     );
   });
 
+async function readMockRows(table, params) {
+  const url = new URL(`/rest/v1/${table}`, MOCK_URL);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, String(value));
+  }
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(
+      `lecture REST ${table} refusée : HTTP ${response.status} ${await response.text()}`,
+    );
+  }
+  return response.json();
+}
+
+async function waitForMockRows(table, params, predicate, label, timeout = 8_000) {
+  const deadline = Date.now() + timeout;
+  let rows = [];
+  while (Date.now() < deadline) {
+    rows = await readMockRows(table, params);
+    if (predicate(rows)) return rows;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`${label} n'est pas devenu observable via REST : ${JSON.stringify(rows)}`);
+}
+
+function eventIdFromUrl(url) {
+  const eventId = new URL(url).pathname.split("/").filter(Boolean).at(-1) ?? "";
+  if (!/^[0-9a-f-]{36}$/i.test(eventId)) {
+    throw new Error(`identifiant d'événement invalide dans ${url}`);
+  }
+  return eventId.toLowerCase();
+}
+
+const MOCK_REALTIME_CONSOLE_ERROR =
+  /^WebSocket connection to 'ws:\/\/127\.0\.0\.1:4545\/realtime\/v1\/websocket\?apikey=[^']+&vsn=2\.0\.0' failed: Connection closed before receiving a handshake response$/;
+const INTENTIONAL_400_CONSOLE_ERROR =
+  /^Failed to load resource: the server responded with a status of 400 \(Bad Request\)$/;
+
+function isExpectedMockRealtimeError(entry) {
+  if (!MOCK_REALTIME_CONSOLE_ERROR.test(entry.text)) return false;
+  try {
+    const location = new URL(entry.url);
+    return (
+      location.origin === BASE_URL &&
+      location.pathname.startsWith("/_next/static/chunks/")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isExpectedIntentionalRpcFailure(entry, rpcName) {
+  if (entry.intentionalRpcFailure !== rpcName) return false;
+  if (!INTENTIONAL_400_CONSOLE_ERROR.test(entry.text)) return false;
+  try {
+    return new URL(entry.url).pathname === `/rest/v1/rpc/${rpcName}`;
+  } catch {
+    return false;
+  }
+}
+
 async function waitForButtonState(locator, enabled, timeout = 8_000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
@@ -96,6 +163,13 @@ async function waitForButtonState(locator, enabled, timeout = 8_000) {
 }
 
 try {
+  const fixedCaptureStart = {
+    events: eventPayloads.length,
+    rosters: rosterPayloads.length,
+    deletes: eventDeletes.length,
+    cycles: cyclePayloads.length,
+    scores: scorePayloads.length,
+  };
   await page.goto(`${BASE_URL}/signup`, { waitUntil: "networkidle" });
   await page.fill("#name", "Organisateur cycles");
   await page.fill("#email", `cycles-${Date.now()}@test.fr`);
@@ -152,19 +226,25 @@ try {
     const { pathname } = new URL(request.url());
     return request.method() === "DELETE" && pathname === "/rest/v1/events";
   });
+  intentionalRpcFailure = "replace_event_roster";
   await createButton.click();
   await expectVisible(page.getByRole("alert").getByText("La liste des joueurs est invalide."));
   await rollbackRequest;
+  await page.waitForLoadState("networkidle");
+  intentionalRpcFailure = null;
   if (!(await createButton.isEnabled())) {
     throw new Error("le bouton de création reste désactivé après rollback");
   }
-  const firstRosterPayload = rosterPayloads.at(-1);
+  const firstRosterPayload = rosterPayloads.at(fixedCaptureStart.rosters);
 
   await createButton.click();
   await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 15_000 });
+  const eventUrl = page.url();
+  const fixedEventId = eventIdFromUrl(eventUrl);
 
-  const rosterPayload = rosterPayloads.at(-1);
-  if (!firstRosterPayload || !rosterPayload || rosterPayloads.length !== 2) {
+  const fixedRosterAttempts = rosterPayloads.slice(fixedCaptureStart.rosters);
+  const rosterPayload = fixedRosterAttempts.at(-1);
+  if (!firstRosterPayload || !rosterPayload || fixedRosterAttempts.length !== 2) {
     throw new Error("les deux appels replace_event_roster ne sont pas observés");
   }
   if (JSON.stringify(firstRosterPayload.p_players) !== JSON.stringify(rosterPayload.p_players)) {
@@ -204,12 +284,14 @@ try {
   ) {
     throw new Error(`affectations RPC invalides : ${JSON.stringify([...teamCounts])}`);
   }
-  if (eventPayloads.length !== 2 || eventDeletes.length !== 1) {
+  const fixedEventPayloads = eventPayloads.slice(fixedCaptureStart.events);
+  const fixedEventDeletes = eventDeletes.slice(fixedCaptureStart.deletes);
+  if (fixedEventPayloads.length !== 2 || fixedEventDeletes.length !== 1) {
     throw new Error(
-      `rollback incomplet : ${eventPayloads.length} créations, ${eventDeletes.length} suppression`,
+      `rollback incomplet : ${fixedEventPayloads.length} créations, ${fixedEventDeletes.length} suppression`,
     );
   }
-  for (const eventPayload of eventPayloads) {
+  for (const eventPayload of fixedEventPayloads) {
     const settings = eventPayload.settings;
     const expectedSettings = {
       points_per_match: 24,
@@ -225,9 +307,6 @@ try {
     }
   }
   await page.waitForLoadState("networkidle");
-  // Le premier 400 du RPC roster est volontaire et sera filtré précisément au bilan.
-
-  const eventUrl = page.url();
   const draftComposer = page.getByRole("group", { name: "Composition des équipes" });
   await expectVisible(draftComposer);
   if ((await draftComposer.getByText(/^Équipe [1-3]$/).count()) !== 3) {
@@ -272,7 +351,7 @@ try {
     page.getByText("Il faut un nombre pair de joueurs (minimum 4).", { exact: true }),
   );
   await expectVisible(page.getByRole("button", { name: "Recomposer les équipes" }));
-  if (cyclePayloads.length !== 0) {
+  if (cyclePayloads.length !== fixedCaptureStart.cycles) {
     throw new Error("un cycle a été envoyé pendant le brouillon fixe impair");
   }
 
@@ -294,7 +373,7 @@ try {
   await expectVisible(page.getByRole("button", { name: "Retirer Tiana" }));
   await waitForButtonState(launchButton, false);
   await expectVisible(page.getByText("Un joueur est sans équipe.", { exact: true }));
-  if (cyclePayloads.length !== 0) {
+  if (cyclePayloads.length !== fixedCaptureStart.cycles) {
     throw new Error("un cycle a été envoyé avant recomposition des équipes");
   }
 
@@ -391,9 +470,23 @@ try {
   const nameById = new Map(
     finalRoster.map((player) => [player.id.toLowerCase(), player.display_name]),
   );
+  const teamNumberById = new Map(
+    finalRoster.map((player) => [player.id.toLowerCase(), player.team_number]),
+  );
+  const fixedTeamIds = new Map();
+  for (const player of finalRoster) {
+    fixedTeamIds.set(player.team_number, [
+      ...(fixedTeamIds.get(player.team_number) ?? []),
+      player.id.toLowerCase(),
+    ]);
+  }
+  const fixedCyclePayloads = () =>
+    cyclePayloads.filter(
+      (payload) => String(payload.p_event_id).toLowerCase() === fixedEventId,
+    );
 
   async function assertMatchCardContract(card, cycleNumber, roundNumber, status) {
-    const cyclePayload = cyclePayloads.find(
+    const cyclePayload = fixedCyclePayloads().find(
       (payload) => payload.p_expected_cycle === cycleNumber,
     );
     const plannedMatch = cyclePayload?.p_matches?.find(
@@ -459,6 +552,44 @@ try {
     throw new Error("l'action de clôture avec matchs pending est encore affichée");
   }
 
+  const [persistedRoundOne] = await waitForMockRows(
+    "matches",
+    {
+      event_id: `eq.${fixedEventId}`,
+      cycle_number: "eq.1",
+      round_number: "eq.1",
+      order: "court.asc",
+      select:
+        "id,status,cycle_number,round_number,court,team1_p1,team1_p2,team2_p1,team2_p2",
+    },
+    (rows) => rows.length === 1,
+    "le round 1 fixe",
+  );
+  if (
+    !/^[0-9a-f-]{36}$/i.test(persistedRoundOne.id ?? "") ||
+    persistedRoundOne.status !== "pending" ||
+    persistedRoundOne.cycle_number !== 1 ||
+    persistedRoundOne.round_number !== 1
+  ) {
+    throw new Error(`round 1 REST invalide : ${JSON.stringify(persistedRoundOne)}`);
+  }
+  const roundOneActiveIds = new Set(
+    [
+      persistedRoundOne.team1_p1,
+      persistedRoundOne.team1_p2,
+      persistedRoundOne.team2_p1,
+      persistedRoundOne.team2_p2,
+    ].map((id) => String(id).toLowerCase()),
+  );
+  const roundOneRestingTeams = [...fixedTeamIds.entries()]
+    .filter(([, memberIds]) => memberIds.every((id) => !roundOneActiveIds.has(id)))
+    .map(([teamNumber]) => teamNumber);
+  if (roundOneRestingTeams.length !== 1) {
+    throw new Error(
+      `le round 1 REST ne désigne pas une équipe au repos : ${roundOneRestingTeams}`,
+    );
+  }
+
   function teamNumbersInText(text) {
     return [...finalTeams.entries()]
       .filter(([, members]) => members.every((name) => text.includes(name)))
@@ -468,7 +599,7 @@ try {
 
   const cycleOnePairings = new Set();
   const cycleOneTeamsByRound = new Map();
-  let firstRestingTeam = null;
+  const firstRestingTeam = roundOneRestingTeams[0];
   for (let round = 1; round <= 3; round++) {
     const roundLabel = `R${round}`;
     const roundButton = page.getByRole("button", {
@@ -495,8 +626,16 @@ try {
     if (restingTeams.length !== 1) {
       throw new Error(`repos d'équipe invalide au round ${round}`);
     }
-    if (round === 1) firstRestingTeam = restingTeams[0];
-    const restLabel = page.getByText(/^Au repos : Équipe /).first();
+    if (round === 1 && restingTeams[0] !== firstRestingTeam) {
+      throw new Error("le repos du round 1 affiché diverge de la ligne REST persistée");
+    }
+    const restPrefixes = page.getByText("Au repos :", { exact: true });
+    if ((await restPrefixes.count()) !== 1) {
+      throw new Error(
+        `le round fixe ${round} affiche ${await restPrefixes.count()} libellé(s) de repos`,
+      );
+    }
+    const restLabel = restPrefixes.locator("..");
     await expectVisible(restLabel);
     const restText = (await restLabel.textContent()) ?? "";
     if (
@@ -528,7 +667,11 @@ try {
   await page.keyboard.press("Escape");
 
   const restingMembers = finalTeams.get(firstRestingTeam);
+  if (!restingMembers || restingMembers.length !== 2) {
+    throw new Error("le binôme au repos du round 1 est introuvable");
+  }
   const participantName = restingMembers[0];
+  const fixedPartnerName = restingMembers[1];
   await page.goto(`${BASE_URL}/join/${shareCode}`, { waitUntil: "networkidle" });
   await expectVisible(page.getByText("Qui es-tu ?"));
   await page
@@ -557,6 +700,20 @@ try {
       `prochain round participant inattendu : ${participantRound} au lieu de ${expectedParticipantRound}`,
     );
   }
+  const participantMatchName = (await participantMatch.getAttribute("aria-label")) ?? "";
+  const parsedParticipantMatch =
+    /^Annoncer le score : (.+) et (.+) contre (.+) et (.+), terrain \d+$/.exec(
+      participantMatchName,
+    );
+  const participantSides = parsedParticipantMatch
+    ? [parsedParticipantMatch.slice(1, 3), parsedParticipantMatch.slice(3, 5)]
+    : [];
+  const participantSide = participantSides.find((side) => side.includes(participantName));
+  if (!participantSide || !participantSide.includes(fixedPartnerName)) {
+    throw new Error(
+      `le prochain match ne conserve pas le partenaire fixe ${fixedPartnerName} : ${participantMatchName}`,
+    );
+  }
   await expectVisible(participantMatch.getByText(`R${participantRound}`, { exact: false }));
 
   await page.getByRole("radio", { name: "Classement" }).click();
@@ -572,7 +729,14 @@ try {
   }
   for (const names of finalTeams.values()) {
     const label = [...names].sort((first, second) => first.localeCompare(second)).join(" & ");
-    await expectVisible(participantTable.getByText(label, { exact: false }));
+    const teamRow = participantTable.getByRole("row").filter({ hasText: label });
+    if ((await teamRow.count()) !== 1) {
+      throw new Error(`le binôme ${label} n'a pas une ligne participant unique`);
+    }
+    const rowText = (await teamRow.textContent()) ?? "";
+    if (!names.every((name) => rowText.includes(name))) {
+      throw new Error(`la ligne participant ne contient pas les deux membres de ${label}`);
+    }
   }
   await expectVisible(participantTable.getByText("(ton équipe)", { exact: true }));
 
@@ -621,8 +785,10 @@ try {
       throw new Error(`actions de fin invalides après le score ${round} du cycle 1`);
     }
   }
-  if (scorePayloads.length !== 3) {
-    throw new Error(`nombre de scores cycle 1 inattendu : ${scorePayloads.length}`);
+  if (scorePayloads.length - fixedCaptureStart.scores !== 3) {
+    throw new Error(
+      `nombre de scores cycle 1 inattendu : ${scorePayloads.length - fixedCaptureStart.scores}`,
+    );
   }
 
   await page.goto(`${BASE_URL}/join/${shareCode}`, { waitUntil: "networkidle" });
@@ -641,6 +807,25 @@ try {
   await page.getByRole("radio", { name: "Classement" }).click();
   const organizerTable = page.getByRole("table", { name: "Classement par équipe" });
   await expectVisible(organizerTable);
+  for (const heading of ["Équipe", "J", "V", "N", "D", "Pour", "Contre", "Diff."]) {
+    await expectVisible(
+      organizerTable.getByRole("columnheader", { name: heading, exact: true }),
+    );
+  }
+  if ((await organizerTable.getByRole("row").count()) !== 4) {
+    throw new Error("le classement collectif organisateur ne contient pas trois équipes");
+  }
+  for (const names of finalTeams.values()) {
+    const label = [...names].sort((first, second) => first.localeCompare(second)).join(" & ");
+    const teamRow = organizerTable.getByRole("row").filter({ hasText: label });
+    if ((await teamRow.count()) !== 1) {
+      throw new Error(`le binôme ${label} n'a pas une ligne organisateur unique`);
+    }
+    const rowText = (await teamRow.textContent()) ?? "";
+    if (!names.every((name) => rowText.includes(name))) {
+      throw new Error(`la ligne organisateur ne contient pas les deux membres de ${label}`);
+    }
+  }
   await expectVisible(organizerTable.getByText("(ton équipe)", { exact: true }));
   await page.getByRole("radio", { name: "Matchs" }).click();
 
@@ -669,6 +854,71 @@ try {
   if ((await addCycleButton.count()) !== 0 || (await completeEventButton.count()) !== 0) {
     throw new Error("les actions de cycle restent visibles au début du cycle 2");
   }
+  for (let localRound = 1; localRound <= 3; localRound++) {
+    await expectVisible(
+      page.getByRole("button", { name: new RegExp(`^Cycle 2 · R${localRound}`) }),
+    );
+  }
+
+  const persistedFixedMatches = await waitForMockRows(
+    "matches",
+    {
+      event_id: `eq.${fixedEventId}`,
+      order: "cycle_number.asc,round_number.asc,court.asc",
+      select:
+        "id,cycle_number,round_number,court,team1_p1,team1_p2,team2_p1,team2_p2",
+    },
+    (rows) => rows.length === 6,
+    "les six matchs fixes après ajout du cycle 2",
+  );
+  const persistedCycleTwo = persistedFixedMatches.filter(
+    (match) => match.cycle_number === 2,
+  );
+  const cycleTwoRounds = persistedCycleTwo
+    .map((match) => match.round_number)
+    .sort((first, second) => first - second);
+  if (
+    persistedCycleTwo.length !== 3 ||
+    JSON.stringify(cycleTwoRounds) !== JSON.stringify([4, 5, 6])
+  ) {
+    throw new Error(`lignes persistées du cycle 2 invalides : ${JSON.stringify(persistedCycleTwo)}`);
+  }
+  const persistedTuples = persistedFixedMatches.map(
+    (match) => `${match.cycle_number}:${match.round_number}:${match.court}`,
+  );
+  if (new Set(persistedTuples).size !== persistedTuples.length) {
+    throw new Error(`tuple (cycle, round, terrain) dupliqué : ${persistedTuples}`);
+  }
+  for (const match of persistedCycleTwo) {
+    const firstTeam = [match.team1_p1, match.team1_p2].map((id) =>
+      teamNumberById.get(String(id).toLowerCase()),
+    );
+    const secondTeam = [match.team2_p1, match.team2_p2].map((id) =>
+      teamNumberById.get(String(id).toLowerCase()),
+    );
+    if (
+      firstTeam.some((teamNumber) => teamNumber == null) ||
+      secondTeam.some((teamNumber) => teamNumber == null) ||
+      firstTeam[0] !== firstTeam[1] ||
+      secondTeam[0] !== secondTeam[1]
+    ) {
+      throw new Error(`un binôme fixe a changé dans le cycle 2 : ${JSON.stringify(match)}`);
+    }
+  }
+  const persistedFixedRoster = await readMockRows("event_players", {
+    event_id: `eq.${fixedEventId}`,
+    order: "seed.asc",
+    select: "id,seed,team_number",
+  });
+  if (
+    persistedFixedRoster.length !== finalRoster.length ||
+    persistedFixedRoster.some(
+      (player) =>
+        teamNumberById.get(String(player.id).toLowerCase()) !== player.team_number,
+    )
+  ) {
+    throw new Error("les affectations persistées ont changé après le cycle 2");
+  }
 
   for (let localRound = 1; localRound <= 3; localRound++) {
     await completeRound(2, localRound, localRound + 3);
@@ -680,8 +930,10 @@ try {
       throw new Error(`actions de fin invalides après le score ${localRound} du cycle 2`);
     }
   }
-  if (scorePayloads.length !== 6) {
-    throw new Error(`nombre de scores total inattendu : ${scorePayloads.length}`);
+  if (scorePayloads.length - fixedCaptureStart.scores !== 6) {
+    throw new Error(
+      `nombre de scores total inattendu : ${scorePayloads.length - fixedCaptureStart.scores}`,
+    );
   }
   await expectVisible(addCycleButton);
   await expectVisible(completeEventButton);
@@ -699,7 +951,7 @@ try {
     finalRoster.map((player) => [player.id.toLowerCase(), player.team_number]),
   );
   const winsByTeam = new Map([...finalTeams.keys()].map((teamNumber) => [teamNumber, 0]));
-  for (const cyclePayload of cyclePayloads) {
+  for (const cyclePayload of fixedCyclePayloads()) {
     for (const match of cyclePayload.p_matches) {
       const winner = teamNumberByPlayer.get(match.team1_p1.toLowerCase());
       winsByTeam.set(winner, winsByTeam.get(winner) + 1);
@@ -715,18 +967,191 @@ try {
     );
   }
 
+  const capturedFixedCyclePayloads = fixedCyclePayloads();
   if (
-    JSON.stringify(cyclePayloads.map((payload) => payload.p_expected_cycle)) !==
+    JSON.stringify(capturedFixedCyclePayloads.map((payload) => payload.p_expected_cycle)) !==
     JSON.stringify([1, 2])
   ) {
-    throw new Error(`payloads de cycle inattendus : ${JSON.stringify(cyclePayloads)}`);
+    throw new Error(
+      `payloads de cycle fixe inattendus : ${JSON.stringify(capturedFixedCyclePayloads)}`,
+    );
   }
+  const fixedScorePayloads = scorePayloads.slice(fixedCaptureStart.scores);
   if (
-    scorePayloads.length !== 6 ||
-    new Set(scorePayloads.map((payload) => payload.p_match_id)).size !== 6
+    fixedScorePayloads.length !== 6 ||
+    new Set(fixedScorePayloads.map((payload) => payload.p_match_id)).size !== 6
   ) {
     throw new Error("les six scores n'ont pas ciblé six matchs distincts");
   }
+
+  const remixedCaptureStart = {
+    events: eventPayloads.length,
+    rosters: rosterPayloads.length,
+    cycles: cyclePayloads.length,
+    scores: scorePayloads.length,
+  };
+  const remixedNames = ["Ana", "Basile", "Chloé", "Dario", "Élise", "Felix"];
+
+  await page.goto(`${BASE_URL}/events/new`, { waitUntil: "networkidle" });
+  await page.getByRole("radio", { name: /^Americano/ }).click();
+  await page.fill("#event-name", "Americano remixé E2E");
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expectVisible(page.getByRole("heading", { name: "Réglages" }));
+  await page.getByRole("button", { name: "Réduire terrains" }).click();
+  await waitForButtonState(page.getByRole("button", { name: "Réduire terrains" }), false);
+  await page.getByRole("radio", { name: "Individuel · remixé" }).click();
+  await page.getByRole("radio", { name: "Aléatoire" }).click();
+  await page.getByRole("button", { name: "Continuer" }).click();
+  await expectVisible(page.getByRole("heading", { name: "Joueurs" }));
+
+  for (const name of remixedNames) {
+    await page.getByRole("textbox", { name: "Nom du joueur" }).fill(name);
+    await page.getByRole("button", { name: "Ajouter le joueur" }).click();
+  }
+  await expectVisible(
+    page.getByText("6 joueurs · 3 rounds · 2 matchs et 1 repos par joueur", {
+      exact: true,
+    }),
+  );
+  await page.getByRole("button", { name: "Créer l'événement" }).click();
+  await page.waitForURL(/\/events\/[0-9a-f-]{36}$/, { timeout: 15_000 });
+  const remixedEventId = eventIdFromUrl(page.url());
+  if (remixedEventId === fixedEventId) {
+    throw new Error("les scénarios fixe et remixé ont réutilisé le même événement");
+  }
+
+  const remixedEventPayloads = eventPayloads.slice(remixedCaptureStart.events);
+  const remixedRosterPayloads = rosterPayloads.slice(remixedCaptureStart.rosters);
+  if (remixedEventPayloads.length !== 1 || remixedRosterPayloads.length !== 1) {
+    throw new Error(
+      `captures remixées non isolées : ${remixedEventPayloads.length} événement, ${remixedRosterPayloads.length} roster`,
+    );
+  }
+  const expectedRemixedSettings = {
+    points_per_match: 24,
+    courts: 1,
+    rounds: 3,
+    pairing: "random",
+    team_mode: "remixed",
+    composition: "random",
+    rounds_per_cycle: 3,
+  };
+  if (
+    JSON.stringify(remixedEventPayloads[0].settings) !==
+    JSON.stringify(expectedRemixedSettings)
+  ) {
+    throw new Error(
+      `settings de l'Americano remixé invalides : ${JSON.stringify(remixedEventPayloads[0].settings)}`,
+    );
+  }
+  const remixedRosterPayload = remixedRosterPayloads[0];
+  if (
+    String(remixedRosterPayload.p_event_id).toLowerCase() !== remixedEventId ||
+    remixedRosterPayload.p_rounds_per_cycle !== 3 ||
+    remixedRosterPayload.p_players.length !== 6 ||
+    remixedRosterPayload.p_players.some((player) => player.team_number !== null)
+  ) {
+    throw new Error(`roster remixé invalide : ${JSON.stringify(remixedRosterPayload)}`);
+  }
+
+  const remixedCycleResponsePromise = waitForRpcResponse("commit_americano_cycle");
+  await page.getByRole("button", { name: "Lancer l'événement" }).click();
+  const remixedCycleResponse = await remixedCycleResponsePromise;
+  if (!remixedCycleResponse.ok()) {
+    throw new Error(`lancement remixé refusé : HTTP ${remixedCycleResponse.status()}`);
+  }
+  await expectVisible(page.getByText("En cours", { exact: true }), 15_000);
+  await expectVisible(page.getByText("Équipes remixées", { exact: true }));
+  await expectVisible(page.getByText("Cycle 1", { exact: true }));
+
+  const remixedCyclePayloads = cyclePayloads
+    .slice(remixedCaptureStart.cycles)
+    .filter((payload) => String(payload.p_event_id).toLowerCase() === remixedEventId);
+  if (
+    remixedCyclePayloads.length !== 1 ||
+    remixedCyclePayloads[0].p_expected_cycle !== 1 ||
+    remixedCyclePayloads[0].p_matches.length !== 3
+  ) {
+    throw new Error(`cycle remixé non isolé : ${JSON.stringify(remixedCyclePayloads)}`);
+  }
+
+  const appearances = new Map(remixedNames.map((name) => [name, 0]));
+  const rests = new Map(remixedNames.map((name) => [name, 0]));
+  const partnerPairs = [];
+  for (let round = 1; round <= 3; round++) {
+    await page.getByRole("button", { name: new RegExp(`^R${round}`) }).click();
+    const card = page.locator(
+      `button[data-match-status="pending"][data-cycle-number="1"][data-round-number="${round}"][data-court="1"]`,
+    );
+    await expectVisible(card);
+    const accessibleName = (await card.getAttribute("aria-label")) ?? "";
+    const parsed =
+      /^Annoncer le score : (.+) et (.+) contre (.+) et (.+), terrain 1$/.exec(
+        accessibleName,
+      );
+    if (!parsed) {
+      throw new Error(`carte remixée illisible au round ${round} : ${accessibleName}`);
+    }
+    const matchNames = parsed.slice(1, 5);
+    if (
+      new Set(matchNames).size !== 4 ||
+      matchNames.some((name) => !appearances.has(name))
+    ) {
+      throw new Error(`joueurs remixés invalides au round ${round} : ${matchNames}`);
+    }
+    for (const name of matchNames) {
+      appearances.set(name, appearances.get(name) + 1);
+    }
+    partnerPairs.push(
+      [matchNames[0], matchNames[1]].sort().join(" + "),
+      [matchNames[2], matchNames[3]].sort().join(" + "),
+    );
+
+    const expectedRestNames = remixedNames.filter((name) => !matchNames.includes(name));
+    const restPrefixes = page.getByText("Au repos :", { exact: true });
+    if ((await restPrefixes.count()) !== 1) {
+      throw new Error(
+        `le round remixé ${round} affiche ${await restPrefixes.count()} libellé(s) de repos`,
+      );
+    }
+    const restMessage = restPrefixes.locator("..");
+    await expectVisible(restMessage);
+    const restText = ((await restMessage.textContent()) ?? "").trim();
+    const displayedRestNames = restText
+      .replace(/^Au repos :\s*/, "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .sort((first, second) => first.localeCompare(second));
+    const sortedExpectedRestNames = [...expectedRestNames].sort((first, second) =>
+      first.localeCompare(second),
+    );
+    if (
+      expectedRestNames.length !== 2 ||
+      JSON.stringify(displayedRestNames) !== JSON.stringify(sortedExpectedRestNames)
+    ) {
+      throw new Error(`repos remixés invalides au round ${round} : ${restText}`);
+    }
+    for (const name of expectedRestNames) {
+      rests.set(name, rests.get(name) + 1);
+    }
+  }
+
+  for (const name of remixedNames) {
+    if (appearances.get(name) !== 2) {
+      throw new Error(`${name} ne joue pas exactement deux fois`);
+    }
+    if (rests.get(name) !== 1) {
+      throw new Error(`${name} ne se repose pas exactement une fois`);
+    }
+  }
+  if (partnerPairs.length !== 6 || new Set(partnerPairs).size !== 6) {
+    throw new Error("un partenaire a été répété");
+  }
+  if (scorePayloads.length !== remixedCaptureStart.scores) {
+    throw new Error("le scénario remixé a annoncé un score inattendu");
+  }
+
   if (directRosterMutations.length > 0) {
     throw new Error(
       `mutations directes interdites dans event_players : ${directRosterMutations.join(" | ")}`,
@@ -740,16 +1165,18 @@ try {
   if (pageErrors.length > 0) {
     throw new Error(`erreurs page : ${[...new Set(pageErrors)].join(" | ")}`);
   }
+  const expectedIntentionalRosterErrors = consoleErrors.filter((entry) =>
+    isExpectedIntentionalRpcFailure(entry, "replace_event_roster"),
+  );
+  if (expectedIntentionalRosterErrors.length !== 1) {
+    throw new Error(
+      `la fenêtre 400 replace_event_roster a produit ${expectedIntentionalRosterErrors.length} erreur(s) console au lieu d'une`,
+    );
+  }
   const unexpectedConsoleErrors = consoleErrors.filter(
-    (entry) => {
-      const expectedRosterFailure =
-        entry.url.includes("/rest/v1/rpc/replace_event_roster") &&
-        entry.text.includes("400");
-      const expectedMockRealtimeFailure =
-        entry.text.includes("WebSocket connection to 'ws://127.0.0.1:4545/realtime/v1/websocket") &&
-        entry.text.includes("Connection closed before receiving a handshake response");
-      return !expectedRosterFailure && !expectedMockRealtimeFailure;
-    },
+    (entry) =>
+      !isExpectedIntentionalRpcFailure(entry, "replace_event_roster") &&
+      !isExpectedMockRealtimeError(entry),
   );
   if (unexpectedConsoleErrors.length > 0) {
     throw new Error(
@@ -760,7 +1187,7 @@ try {
   }
 
   console.log(
-    "✅ Americano fixe : brouillon atomique, cycles 1-2, participant, classement et podium valides.",
+    "✅ Americano fixe et remixé : cycles, repos, partenaires, classement et podium valides.",
   );
 } finally {
   await browser.close();
