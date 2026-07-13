@@ -542,3 +542,39 @@ test("Mexicano matches cannot be inserted after event completion", async () => {
   );
   assert.equal((await select("matches", `event_id=eq.${completed.id}`)).length, 1);
 });
+
+test("Americano cycle payloads require native JSON numbers and UUID strings", async () => {
+  const nativeTypes = await insert("events", {
+    organizer_id: event.organizer_id,
+    format: "americano",
+    name: "Native Cycle Types",
+    settings: {
+      points_per_match: 24,
+      courts: 1,
+      rounds: 3,
+      pairing: "random",
+      team_mode: "fixed",
+      composition: "manual",
+      rounds_per_cycle: 3,
+    },
+  });
+  const roster = await replaceRoster(nativeTypes.id, sixFixedPlayerRows(), 3);
+
+  const stringlyNumbers = cyclePayload(nativeTypes.id, roster, 1);
+  stringlyNumbers.p_matches[0].round_number = String(
+    stringlyNumbers.p_matches[0].round_number,
+  );
+  stringlyNumbers.p_matches[0].court = String(stringlyNumbers.p_matches[0].court);
+  await assert.rejects(
+    () => rpc("commit_americano_cycle", stringlyNumbers),
+    /invalid_cycle_payload/,
+  );
+
+  const scalarUuid = cyclePayload(nativeTypes.id, roster, 1);
+  scalarUuid.p_matches[0].team1_p1 = 123;
+  await assert.rejects(
+    () => rpc("commit_americano_cycle", scalarUuid),
+    /invalid_cycle_payload/,
+  );
+  assert.equal((await select("matches", `event_id=eq.${nativeTypes.id}`)).length, 0);
+});

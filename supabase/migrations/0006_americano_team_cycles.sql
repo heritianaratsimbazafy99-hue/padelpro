@@ -701,6 +701,22 @@ begin
 
   begin
     if exists (
+      select 1
+      from jsonb_array_elements(p_matches) as item(value)
+      where jsonb_typeof(item.value) is distinct from 'object'
+        or jsonb_typeof(item.value -> 'round_number') is distinct from 'number'
+        or jsonb_typeof(item.value -> 'court') is distinct from 'number'
+        or mod((item.value ->> 'round_number')::numeric, 1) <> 0
+        or mod((item.value ->> 'court')::numeric, 1) <> 0
+        or jsonb_typeof(item.value -> 'team1_p1') is distinct from 'string'
+        or jsonb_typeof(item.value -> 'team1_p2') is distinct from 'string'
+        or jsonb_typeof(item.value -> 'team2_p1') is distinct from 'string'
+        or jsonb_typeof(item.value -> 'team2_p2') is distinct from 'string'
+    ) then
+      raise exception 'invalid_cycle_payload';
+    end if;
+
+    if exists (
       with payload as (
         select * from jsonb_to_recordset(p_matches) as x(
           round_number integer,
