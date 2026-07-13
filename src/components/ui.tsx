@@ -170,16 +170,19 @@ export function Segmented<T extends string>({
   value,
   onChange,
   className,
+  ariaLabel,
 }: {
   options: Array<{ value: T; label: ReactNode }>;
   value: T;
   onChange: (v: T) => void;
   className?: string;
+  ariaLabel?: string;
 }) {
   const index = options.findIndex((o) => o.value === value);
   return (
     <div
       role="radiogroup"
+      aria-label={ariaLabel}
       className={cx("relative flex p-1 bg-surface-2 border border-border rounded-xl", className)}
     >
       {/* Pilule active : glisse d'un onglet à l'autre */}
