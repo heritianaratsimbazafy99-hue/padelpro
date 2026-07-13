@@ -123,6 +123,32 @@ test("a seeded remixed cycle is deterministic", () => {
   );
 });
 
+test("remixed cycle rejects non-safe integer options", () => {
+  const options = {
+    players: makePlayers(6),
+    roundsPerCycle: 3,
+    courts: 1,
+    mode: "random" as const,
+    attempts: 1,
+  };
+  const invalidValues = [1.5, Number.NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1];
+  const cases = [
+    ["roundsPerCycle", /rounds.*entier sûr/],
+    ["courts", /terrains.*entier sûr/],
+    ["attempts", /tentatives.*entier sûr/],
+  ] as const;
+
+  for (const [option, expectedMessage] of cases) {
+    for (const value of invalidValues) {
+      assert.throws(
+        () => generateRemixedCycle({ ...options, [option]: value }),
+        expectedMessage,
+        `${option}=${value} doit être rejeté`,
+      );
+    }
+  }
+});
+
 test("americano 8 joueurs / 7 rounds / 2 terrains : rotation parfaite des partenaires", () => {
   const players = makePlayers(8);
   const schedule = generateAmericanoSchedule(players, 7, 2, "random");

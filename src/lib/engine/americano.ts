@@ -307,6 +307,12 @@ export function generateRemixedCycle({
   random = Math.random,
 }: GenerateRemixedCycleOptions): PlannedRound[] {
   if (players.length < 4) throw new Error("Il faut au moins 4 joueurs.");
+  if (!Number.isSafeInteger(roundsPerCycle))
+    throw new Error("Le nombre de rounds doit être un entier sûr.");
+  if (!Number.isSafeInteger(courts))
+    throw new Error("Le nombre de terrains doit être un entier sûr.");
+  if (!Number.isSafeInteger(attempts))
+    throw new Error("Le nombre de tentatives doit être un entier sûr.");
   if (roundsPerCycle < 1) throw new Error("Il faut au moins un round.");
   if (courts < 1) throw new Error("Il faut au moins un terrain.");
   if (attempts < 1) throw new Error("Il faut au moins une tentative.");
