@@ -216,3 +216,195 @@ test("fixed cycle public numeric parameters must be safe integers", () => {
     );
   }
 });
+
+test("fixed cycle rejects a round range that would exceed the safe integer limit", () => {
+  const input = teams(3);
+  const lastSafeStart = Number.MAX_SAFE_INTEGER - 2;
+  const boundary = generateFixedCycle({
+    teams: input,
+    courts: 1,
+    cycleNumber: 1,
+    startRoundNumber: lastSafeStart,
+  });
+  assert.deepEqual(
+    boundary.map((round) => round.roundNumber),
+    [lastSafeStart, lastSafeStart + 1, Number.MAX_SAFE_INTEGER],
+  );
+
+  assert.throws(
+    () =>
+      generateFixedCycle({
+        teams: input,
+        courts: 1,
+        cycleNumber: 1,
+        startRoundNumber: Number.MAX_SAFE_INTEGER,
+      }),
+    /dernier numéro de round.*entier sûr/i,
+  );
+});
+
+test("generate and audit reject malformed fixed-team rosters", () => {
+  const invalidRosters = [
+    {
+      label: "non-positive team number",
+      roster: [
+        { teamNumber: 0, playerIds: ["p1", "p2"] },
+        { teamNumber: 2, playerIds: ["p3", "p4"] },
+      ],
+      message: /numéro d'équipe.*entier sûr positif/i,
+    },
+    {
+      label: "unsafe team number",
+      roster: [
+        { teamNumber: Number.MAX_SAFE_INTEGER + 1, playerIds: ["p1", "p2"] },
+        { teamNumber: 2, playerIds: ["p3", "p4"] },
+      ],
+      message: /numéro d'équipe.*entier sûr positif/i,
+    },
+    {
+      label: "duplicate team number",
+      roster: [
+        { teamNumber: 1, playerIds: ["p1", "p2"] },
+        { teamNumber: 1, playerIds: ["p3", "p4"] },
+      ],
+      message: /numéros d'équipe.*uniques/i,
+    },
+    {
+      label: "one player",
+      roster: [
+        { teamNumber: 1, playerIds: ["p1"] },
+        { teamNumber: 2, playerIds: ["p3", "p4"] },
+      ],
+      message: /exactement deux identifiants/i,
+    },
+    {
+      label: "three players",
+      roster: [
+        { teamNumber: 1, playerIds: ["p1", "p2", "p3"] },
+        { teamNumber: 2, playerIds: ["p4", "p5"] },
+      ],
+      message: /exactement deux identifiants/i,
+    },
+    {
+      label: "non-string player id",
+      roster: [
+        { teamNumber: 1, playerIds: ["p1", 42] },
+        { teamNumber: 2, playerIds: ["p3", "p4"] },
+      ],
+      message: /identifiants.*chaînes non vides/i,
+    },
+    {
+      label: "blank player id",
+      roster: [
+        { teamNumber: 1, playerIds: ["p1", "   "] },
+        { teamNumber: 2, playerIds: ["p3", "p4"] },
+      ],
+      message: /identifiants.*chaînes non vides/i,
+    },
+    {
+      label: "duplicate player within a team",
+      roster: [
+        { teamNumber: 1, playerIds: ["p1", "p1"] },
+        { teamNumber: 2, playerIds: ["p3", "p4"] },
+      ],
+      message: /joueurs d'une équipe.*distincts/i,
+    },
+    {
+      label: "duplicate player across teams",
+      roster: [
+        { teamNumber: 1, playerIds: ["p1", "p2"] },
+        { teamNumber: 2, playerIds: ["p2", "p4"] },
+      ],
+      message: /identifiants.*uniques entre les équipes/i,
+    },
+  ] as const;
+
+  for (const { label, roster: malformedRoster, message } of invalidRosters) {
+    const roster = malformedRoster as unknown as ReturnType<typeof teams>;
+    assert.throws(
+      () =>
+        generateFixedCycle({
+          teams: roster,
+          courts: 1,
+          cycleNumber: 1,
+          startRoundNumber: 1,
+        }),
+      message,
+      `generate: ${label}`,
+    );
+    assert.throws(
+      () => auditFixedCycle(roster, [], 1),
+      message,
+      `audit: ${label}`,
+    );
+  }
+});
+
+test("audit rejects non-positive court counts", () => {
+  const input = teams(3);
+  for (const courts of [0, -1]) {
+    assert.throws(
+      () => auditFixedCycle(input, [], courts),
+      /au moins un terrain/i,
+      `audit courts=${courts} doit être rejeté`,
+    );
+  }
+});
+
+test("audit counts every invalid or duplicate match court", () => {
+  const input = teams(3);
+  for (const invalidCourt of [Number.NaN, 1.5, Number.MAX_SAFE_INTEGER + 1, 0, 2]) {
+    const rounds = generateFixedCycle({
+      teams: input,
+      courts: 1,
+      cycleNumber: 1,
+      startRoundNumber: 1,
+    });
+    rounds[0].matches[0].court = invalidCourt;
+    assert.equal(
+      auditFixedCycle(input, rounds, 1).courtConflicts,
+      1,
+      `court=${invalidCourt} doit créer un conflit`,
+    );
+  }
+
+  const fourTeams = teams(4);
+  const duplicateCourtRounds = generateFixedCycle({
+    teams: fourTeams,
+    courts: 2,
+    cycleNumber: 1,
+    startRoundNumber: 1,
+  });
+  duplicateCourtRounds[0].matches[1].court = duplicateCourtRounds[0].matches[0].court;
+  assert.equal(auditFixedCycle(fourTeams, duplicateCourtRounds, 2).courtConflicts, 1);
+});
+
+test("audit keeps tracking a repeated valid team when its opponents are invalid", () => {
+  const input = teams(3);
+  const rounds = [
+    {
+      roundNumber: 1,
+      matches: [
+        {
+          court: 1,
+          team1: [...input[0].playerIds] as [string, string],
+          team2: ["unknown-1", "unknown-2"] as [string, string],
+        },
+        {
+          court: 2,
+          team1: ["unknown-3", "unknown-4"] as [string, string],
+          team2: [...input[0].playerIds] as [string, string],
+        },
+      ],
+      resting: [...input[1].playerIds, ...input[2].playerIds],
+    },
+  ];
+
+  const audit = auditFixedCycle(input, rounds, 2);
+  assert.equal(audit.membershipConflicts, 2);
+  assert.equal(audit.teamRoundConflicts, 1);
+  assert.equal(audit.missingPairings, 3);
+  assert.equal(audit.repeatedPairings, 0);
+  assert.equal(audit.playSpread, 1);
+  assert.equal(audit.restSpread, 1);
+});

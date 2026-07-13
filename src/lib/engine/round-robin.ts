@@ -13,12 +13,49 @@ function requireSafeInteger(value: number, label: string): void {
   if (!Number.isSafeInteger(value)) throw new Error(`${label} doit être un entier sûr.`);
 }
 
+function validateFixedTeams(teams: readonly FixedTeam[]): void {
+  const seenTeamNumbers = new Set<number>();
+  const seenPlayerIds = new Set<string>();
+
+  for (const team of teams) {
+    if (!Number.isSafeInteger(team.teamNumber) || team.teamNumber < 1) {
+      throw new Error("Le numéro d'équipe doit être un entier sûr positif.");
+    }
+    if (seenTeamNumbers.has(team.teamNumber)) {
+      throw new Error("Les numéros d'équipe doivent être uniques.");
+    }
+    seenTeamNumbers.add(team.teamNumber);
+
+    if (!Array.isArray(team.playerIds) || team.playerIds.length !== 2) {
+      throw new Error("Chaque équipe doit avoir exactement deux identifiants de joueur.");
+    }
+    const [firstPlayerId, secondPlayerId] = team.playerIds;
+    if (
+      typeof firstPlayerId !== "string" ||
+      firstPlayerId.trim().length === 0 ||
+      typeof secondPlayerId !== "string" ||
+      secondPlayerId.trim().length === 0
+    ) {
+      throw new Error("Les identifiants de joueur doivent être des chaînes non vides.");
+    }
+    if (firstPlayerId === secondPlayerId) {
+      throw new Error("Les joueurs d'une équipe doivent être distincts.");
+    }
+    if (seenPlayerIds.has(firstPlayerId) || seenPlayerIds.has(secondPlayerId)) {
+      throw new Error("Les identifiants de joueur doivent être uniques entre les équipes.");
+    }
+    seenPlayerIds.add(firstPlayerId);
+    seenPlayerIds.add(secondPlayerId);
+  }
+}
+
 export function generateFixedCycle({
   teams,
   courts,
   cycleNumber,
   startRoundNumber,
 }: GenerateFixedCycleOptions): PlannedRound[] {
+  validateFixedTeams(teams);
   requireSafeInteger(courts, "Le nombre de terrains");
   requireSafeInteger(cycleNumber, "Le numéro de cycle");
   requireSafeInteger(startRoundNumber, "Le numéro de round initial");
@@ -29,6 +66,10 @@ export function generateFixedCycle({
   }
 
   const plan = planFixedCycle(teams.length, courts);
+  requireSafeInteger(
+    startRoundNumber + (plan.roundsPerCycle - 1),
+    "Le dernier numéro de round",
+  );
   const rotation: Array<FixedTeam | null> = [...teams].sort(
     (first, second) => first.teamNumber - second.teamNumber,
   );
@@ -96,7 +137,9 @@ export function auditFixedCycle(
   rounds: readonly PlannedRound[],
   courts: number,
 ): FixedCycleAudit {
+  validateFixedTeams(teams);
   requireSafeInteger(courts, "Le nombre de terrains");
+  if (courts < 1) throw new Error("Il faut au moins un terrain.");
 
   const teamOf = new Map(
     teams.flatMap((team) => team.playerIds.map((id) => [id, team.teamNumber] as const)),
@@ -118,7 +161,12 @@ export function auditFixedCycle(
     const seenCourts = new Set<number>();
     const activePlayerIds = new Set<string>();
     for (const match of round.matches) {
-      if (match.court < 1 || match.court > courts || seenCourts.has(match.court)) {
+      if (
+        !Number.isSafeInteger(match.court) ||
+        match.court < 1 ||
+        match.court > courts ||
+        seenCourts.has(match.court)
+      ) {
         courtConflicts++;
       }
       seenCourts.add(match.court);
@@ -136,13 +184,14 @@ export function auditFixedCycle(
 
       const first = resolveSide(match.team1);
       const second = resolveSide(match.team2);
+      for (const teamNumber of [first, second]) {
+        if (teamNumber == null) continue;
+        if (seenTeams.has(teamNumber)) teamRoundConflicts++;
+        seenTeams.add(teamNumber);
+      }
       if (first == null || second == null || first === second) {
         membershipConflicts++;
         continue;
-      }
-      for (const teamNumber of [first, second]) {
-        if (seenTeams.has(teamNumber)) teamRoundConflicts++;
-        seenTeams.add(teamNumber);
       }
       const key = teamPairKey(first, second);
       pairings.set(key, (pairings.get(key) ?? 0) + 1);
