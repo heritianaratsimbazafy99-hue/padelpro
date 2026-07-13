@@ -6,7 +6,8 @@
  * - REST : select (eq, in, or, order, limit, colonnes), insert, update, delete
  *   sur profiles / events / event_players / matches.
  * - RPC : report_score (avec avancement de bracket), claim_player,
- *   global_leaderboard (Elo K=32, invités à 1000) — répliques des fonctions SQL.
+ *   replace_event_roster, commit_americano_cycle et global_leaderboard
+ *   (Elo K=32, invités à 1000) — répliques des fonctions SQL.
  *
  * Usage : node scripts/supabase-mock.mjs [port]
  * puis builder l'app avec NEXT_PUBLIC_SUPABASE_URL=http://localhost:<port>.
@@ -142,6 +143,7 @@ function withDefaults(table, row, user) {
   if (table === "events") {
     base.share_code ??= crypto.randomBytes(3).toString("hex").toUpperCase();
     base.status ??= "draft";
+    base.settings ??= {};
     base.current_round ??= 0;
     base.scheduled_at ??= null;
     base.organizer_id ??= user?.id ?? null;
@@ -151,11 +153,14 @@ function withDefaults(table, row, user) {
     base.seed ??= 0;
     base.profile_id ??= null;
     base.preferred_side ??= null;
+    base.team_number ??= null;
   }
   if (table === "profile_trophies") {
     base.unlocked_at ??= now();
   }
   if (table === "matches") {
+    base.event_id = canonicalUuid(base.event_id);
+    for (const field of MATCH_PLAYER_FIELDS) base[field] = canonicalUuid(base[field]);
     base.score1 ??= null;
     base.score2 ??= null;
     base.status ??= "pending";
@@ -163,6 +168,7 @@ function withDefaults(table, row, user) {
     base.next_match_pos ??= row.next_match_pos ?? null;
     base.next_match_slot ??= row.next_match_slot ?? null;
     base.reported_by ??= null;
+    base.cycle_number ??= 1;
   }
   return base;
 }
@@ -208,7 +214,8 @@ function rpcReportScore(p) {
 
 function rpcClaimPlayer(p, user) {
   if (!user) throw pgError("not_authenticated");
-  const player = db.event_players.find((ep) => ep.id === p.p_player_id);
+  const playerId = canonicalUuid(p.p_player_id);
+  const player = db.event_players.find((ep) => canonicalUuid(ep.id) === playerId);
   const event = player && db.events.find((e) => e.id === player.event_id);
   if (!player || !event || event.share_code !== String(p.p_share_code || "").toUpperCase())
     throw pgError("player_or_code_invalid");
@@ -216,6 +223,383 @@ function rpcClaimPlayer(p, user) {
   // Réplique SQL : copie du côté préféré depuis le profil au claim.
   const profile = db.profiles.find((pr) => pr.id === user.id);
   player.preferred_side = profile?.preferred_side ?? player.preferred_side ?? null;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PG_INTEGER_MIN = -2_147_483_648;
+const PG_INTEGER_MAX = 2_147_483_647;
+const MATCH_PLAYER_FIELDS = ["team1_p1", "team1_p2", "team2_p1", "team2_p2"];
+const canonicalUuid = (value) =>
+  typeof value === "string" && UUID_PATTERN.test(value) ? value.toLowerCase() : value;
+const isPgInteger = (value) =>
+  Number.isInteger(value) && value >= PG_INTEGER_MIN && value <= PG_INTEGER_MAX;
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalJson(value[key])]),
+    );
+  }
+  return value;
+}
+
+const jsonEqual = (left, right) =>
+  JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));
+
+function settingInteger(settings, key) {
+  const value = settings?.[key];
+  if (value == null || value === "") return null;
+  if (typeof value === "number") return isPgInteger(value) ? value : Number.NaN;
+  if (typeof value !== "string" || !/^[+-]?\d+$/.test(value.trim())) return Number.NaN;
+  const parsed = Number(value.trim());
+  return isPgInteger(parsed) ? parsed : Number.NaN;
+}
+
+function fixedRosterDetails(roster) {
+  if (roster.length % 2 !== 0) return null;
+  const teams = new Map();
+  for (const player of roster) {
+    if (!isPgInteger(player.team_number) || player.team_number < 1) return null;
+    const members = teams.get(player.team_number) ?? [];
+    members.push(player);
+    teams.set(player.team_number, members);
+  }
+  if ([...teams.values()].some((members) => members.length !== 2)) return null;
+  if (teams.size * 2 !== roster.length) return null;
+  return { teams, teamCount: teams.size };
+}
+
+function automaticRoundCount(playerCount, courts, teamMode, teamCount = null) {
+  if (teamMode === "fixed") {
+    const logicalRounds = teamCount % 2 === 0 ? teamCount - 1 : teamCount;
+    const matchesPerLogical = Math.floor(teamCount / 2);
+    return logicalRounds * Math.ceil(matchesPerLogical / courts);
+  }
+
+  const active = Math.min(courts * 4, Math.floor(playerCount / 4) * 4);
+  let rounds = playerCount % 4 === 2 ? playerCount / 2 : playerCount - 1;
+  while ((rounds * active) % playerCount !== 0) rounds++;
+  return rounds;
+}
+
+function validRosterPlayer(player) {
+  return Boolean(
+    player &&
+      typeof player.id === "string" &&
+      UUID_PATTERN.test(player.id) &&
+      typeof player.display_name === "string" &&
+      player.display_name.trim() !== "" &&
+      isPgInteger(player.level) &&
+      player.level >= 1 &&
+      player.level <= 10 &&
+      isPgInteger(player.seed) &&
+      player.seed >= 0 &&
+      (player.preferred_side == null || ["left", "right", "both"].includes(player.preferred_side)) &&
+      (player.team_number == null ||
+        (isPgInteger(player.team_number) && player.team_number > 0)),
+  );
+}
+
+function directMatchInsertAllowed(row, user) {
+  if (!row || !user) return false;
+  const eventId = canonicalUuid(row.event_id);
+  const event = db.events.find((candidate) => canonicalUuid(candidate.id) === eventId);
+  if (!event || event.organizer_id !== user.id) return false;
+  return (
+    (event.status === "draft" && ["mexicano", "tournament"].includes(event.format)) ||
+    (event.status === "active" && event.format === "mexicano")
+  );
+}
+
+function matchCycleRoundCourtKey(row) {
+  if (!row || row.bracket_pos != null) return null;
+  return [
+    canonicalUuid(row.event_id),
+    row.cycle_number ?? 1,
+    row.round_number,
+    row.court,
+  ].join(":");
+}
+
+function rpcReplaceEventRoster(p, user) {
+  const eventId = canonicalUuid(p.p_event_id);
+  const event = db.events.find((candidate) => canonicalUuid(candidate.id) === eventId);
+  if (!event || !user || event.organizer_id !== user.id) throw pgError("not_event_organizer");
+  if (event.status !== "draft" || db.matches.some((match) => match.event_id === event.id)) {
+    throw pgError("roster_locked");
+  }
+
+  const rawRoster = p.p_players;
+  if (!Array.isArray(rawRoster)) throw pgError("invalid_roster_payload");
+  const roster = rawRoster.map((player) =>
+    player && typeof player === "object"
+      ? { ...player, id: canonicalUuid(player.id) }
+      : player,
+  );
+  if (roster.some((player) => !validRosterPlayer(player))) {
+    throw pgError("invalid_roster_payload");
+  }
+
+  const ids = new Set();
+  const names = new Set();
+  for (const player of roster) {
+    const normalizedName = player.display_name.trim().toLowerCase();
+    if (ids.has(player.id) || names.has(normalizedName)) {
+      throw pgError("invalid_roster_payload");
+    }
+    ids.add(player.id);
+    names.add(normalizedName);
+  }
+  if (
+    db.event_players.some(
+      (player) =>
+        ids.has(canonicalUuid(player.id)) && canonicalUuid(player.event_id) !== eventId,
+    )
+  ) {
+    throw pgError("invalid_roster_payload");
+  }
+
+  let nextSettings = event.settings;
+  if (p.p_rounds_per_cycle != null) {
+    const roundsPerCycle = p.p_rounds_per_cycle;
+    const courts = settingInteger(event.settings, "courts");
+    const teamMode = event.settings?.team_mode ?? "remixed";
+    if (
+      event.format !== "americano" ||
+      !isPgInteger(roundsPerCycle) ||
+      roundsPerCycle < 1 ||
+      roster.length < 4 ||
+      !isPgInteger(courts) ||
+      courts < 1 ||
+      !["remixed", "fixed"].includes(teamMode)
+    ) {
+      throw pgError("invalid_roster_payload");
+    }
+
+    let teamCount = null;
+    if (teamMode === "fixed") {
+      const fixed = fixedRosterDetails(roster);
+      if (!fixed) throw pgError("fixed_teams_invalid");
+      teamCount = fixed.teamCount;
+    }
+    const expectedRounds = automaticRoundCount(roster.length, courts, teamMode, teamCount);
+    if (roundsPerCycle !== expectedRounds) throw pgError("invalid_roster_payload");
+    nextSettings = {
+      ...event.settings,
+      rounds: expectedRounds,
+      rounds_per_cycle: expectedRounds,
+    };
+  }
+
+  const existingById = new Map(
+    db.event_players
+      .filter((player) => player.event_id === event.id)
+      .map((player) => [canonicalUuid(player.id), player]),
+  );
+  const replacement = roster.map((player) => {
+    const existing = existingById.get(player.id);
+    return {
+      ...(existing ?? {}),
+      id: player.id,
+      event_id: event.id,
+      display_name: player.display_name.trim(),
+      profile_id: existing?.profile_id ?? null,
+      level: player.level,
+      seed: player.seed,
+      preferred_side: player.preferred_side ?? null,
+      team_number: player.team_number ?? null,
+      created_at: existing?.created_at ?? now(),
+    };
+  });
+
+  event.settings = nextSettings;
+  db.event_players = db.event_players
+    .filter((player) => player.event_id !== event.id)
+    .concat(replacement);
+
+  return [...replacement].sort(
+    (left, right) => left.seed - right.seed || left.id.localeCompare(right.id),
+  );
+}
+
+function invalidCyclePayload() {
+  throw pgError("invalid_cycle_payload");
+}
+
+function rpcCommitAmericanoCycle(p, user) {
+  const eventId = canonicalUuid(p.p_event_id);
+  const event = db.events.find((candidate) => canonicalUuid(candidate.id) === eventId);
+  if (!event || !user || event.organizer_id !== user.id) throw pgError("not_event_organizer");
+  if (event.format !== "americano") throw pgError("invalid_event_format");
+
+  const eventMatches = db.matches.filter((match) => match.event_id === event.id);
+  const currentCycle = eventMatches.reduce(
+    (maximum, match) => Math.max(maximum, Number(match.cycle_number ?? 1)),
+    0,
+  );
+  const lastRound = eventMatches.reduce(
+    (maximum, match) => Math.max(maximum, Number(match.round_number ?? 0)),
+    0,
+  );
+  if (!isPgInteger(p.p_expected_cycle)) throw pgError("unexpected_cycle");
+  if (p.p_expected_cycle <= currentCycle) throw pgError("cycle_already_added");
+  if (p.p_expected_cycle !== currentCycle + 1) throw pgError("unexpected_cycle");
+  if (p.p_expected_cycle === 1 && event.status !== "draft") throw pgError("unexpected_cycle");
+  if (p.p_expected_cycle > 1 && event.status !== "active") throw pgError("event_not_active");
+  if (
+    p.p_expected_cycle > 1 &&
+    eventMatches.some(
+      (match) => Number(match.cycle_number ?? 1) === currentCycle && match.status !== "done",
+    )
+  ) {
+    throw pgError("cycle_incomplete");
+  }
+
+  const courts = settingInteger(event.settings, "courts");
+  const configuredCycleRounds = settingInteger(event.settings, "rounds_per_cycle");
+  const legacyRounds = settingInteger(event.settings, "rounds");
+  const roundsPerCycle = configuredCycleRounds ?? legacyRounds;
+  const teamMode = event.settings?.team_mode ?? "remixed";
+  const roster = db.event_players.filter((player) => player.event_id === event.id);
+  if (
+    !isPgInteger(courts) ||
+    courts < 1 ||
+    !isPgInteger(roundsPerCycle) ||
+    roundsPerCycle < 1 ||
+    roster.length < 4 ||
+    !["remixed", "fixed"].includes(teamMode)
+  ) {
+    invalidCyclePayload();
+  }
+
+  let fixed = null;
+  if (teamMode === "fixed") {
+    fixed = fixedRosterDetails(roster);
+    if (!fixed) throw pgError("fixed_teams_invalid");
+  }
+  if (Object.prototype.hasOwnProperty.call(event.settings ?? {}, "rounds_per_cycle")) {
+    const expectedRounds = automaticRoundCount(
+      roster.length,
+      courts,
+      teamMode,
+      fixed?.teamCount ?? null,
+    );
+    if (expectedRounds !== roundsPerCycle) invalidCyclePayload();
+  }
+
+  const rawMatches = p.p_matches;
+  if (!Array.isArray(rawMatches) || rawMatches.length === 0) invalidCyclePayload();
+  const matches = rawMatches.map((match) => {
+    if (!match || typeof match !== "object") return match;
+    const normalized = { ...match };
+    for (const field of MATCH_PLAYER_FIELDS) normalized[field] = canonicalUuid(normalized[field]);
+    return normalized;
+  });
+  const playerIds = new Set(roster.map((player) => player.id));
+  const roundCourts = new Set();
+  const roundPlayers = new Set();
+  const roundMatchCounts = new Map();
+  const appearances = new Map(roster.map((player) => [player.id, 0]));
+
+  for (const match of matches) {
+    if (
+      !match ||
+      !isPgInteger(match.round_number) ||
+      !isPgInteger(match.court) ||
+      match.court < 1 ||
+      match.court > courts
+    ) {
+      invalidCyclePayload();
+    }
+    const idsInMatch = MATCH_PLAYER_FIELDS.map((field) => match[field]);
+    if (
+      idsInMatch.some((id) => typeof id !== "string" || !playerIds.has(id)) ||
+      new Set(idsInMatch).size !== 4
+    ) {
+      invalidCyclePayload();
+    }
+
+    const roundCourt = `${match.round_number}:${match.court}`;
+    if (roundCourts.has(roundCourt)) invalidCyclePayload();
+    roundCourts.add(roundCourt);
+    roundMatchCounts.set(
+      match.round_number,
+      (roundMatchCounts.get(match.round_number) ?? 0) + 1,
+    );
+
+    for (const id of idsInMatch) {
+      const roundPlayer = `${match.round_number}:${id}`;
+      if (roundPlayers.has(roundPlayer)) invalidCyclePayload();
+      roundPlayers.add(roundPlayer);
+      appearances.set(id, appearances.get(id) + 1);
+    }
+  }
+
+  const roundNumbers = [...roundMatchCounts.keys()].sort((left, right) => left - right);
+  if (
+    roundNumbers.length !== roundsPerCycle ||
+    roundNumbers[0] !== lastRound + 1 ||
+    roundNumbers.some((round, index) => round !== lastRound + index + 1)
+  ) {
+    invalidCyclePayload();
+  }
+
+  if (teamMode === "remixed") {
+    const matchesPerRound = Math.min(courts, Math.floor(roster.length / 4));
+    if ([...roundMatchCounts.values()].some((count) => count !== matchesPerRound)) {
+      invalidCyclePayload();
+    }
+    const counts = [...appearances.values()];
+    if (Math.max(...counts) - Math.min(...counts) > 1) invalidCyclePayload();
+  } else {
+    const teamByPlayer = new Map();
+    for (const [teamNumber, members] of fixed.teams) {
+      for (const member of members) teamByPlayer.set(member.id, teamNumber);
+    }
+    const pairings = new Set();
+    for (const match of matches) {
+      const team1 = teamByPlayer.get(match.team1_p1);
+      const team2 = teamByPlayer.get(match.team2_p1);
+      if (
+        team1 !== teamByPlayer.get(match.team1_p2) ||
+        team2 !== teamByPlayer.get(match.team2_p2) ||
+        team1 === team2
+      ) {
+        invalidCyclePayload();
+      }
+      const pairing = [team1, team2].sort((left, right) => left - right).join(":");
+      if (pairings.has(pairing)) invalidCyclePayload();
+      pairings.add(pairing);
+    }
+    const expectedPairings = (fixed.teamCount * (fixed.teamCount - 1)) / 2;
+    if (matches.length !== expectedPairings || pairings.size !== expectedPairings) {
+      invalidCyclePayload();
+    }
+  }
+
+  const rows = matches.map((match) =>
+    withDefaults(
+      "matches",
+      {
+        event_id: event.id,
+        cycle_number: p.p_expected_cycle,
+        round_number: match.round_number,
+        court: match.court,
+        team1_p1: match.team1_p1,
+        team1_p2: match.team1_p2,
+        team2_p1: match.team2_p1,
+        team2_p2: match.team2_p2,
+      },
+      user,
+    ),
+  );
+
+  db.matches.push(...rows);
+  if (p.p_expected_cycle === 1) event.status = "active";
+  event.current_round = lastRound + 1;
 }
 
 function rpcGlobalLeaderboard() {
@@ -419,6 +803,13 @@ const server = http.createServer(async (req, res) => {
         rpcClaimPlayer(params, user);
         return send(res, 204);
       }
+      if (fn === "replace_event_roster") {
+        return send(res, 200, rpcReplaceEventRoster(params, user));
+      }
+      if (fn === "commit_americano_cycle") {
+        rpcCommitAmericanoCycle(params, user);
+        return send(res, 204);
+      }
       if (fn === "global_leaderboard") return send(res, 200, rpcGlobalLeaderboard());
       if (fn === "player_elo_history") return send(res, 200, rpcPlayerEloHistory(params));
       return send(res, 404, { message: `function ${fn} not found` });
@@ -435,6 +826,26 @@ const server = http.createServer(async (req, res) => {
     const match = parseFilters(url.searchParams);
     const wantsObject = (req.headers.accept || "").includes("vnd.pgrst.object+json");
     const select = url.searchParams.get("select") ?? "*";
+
+    if (
+      table === "event_players" &&
+      ["POST", "PATCH", "DELETE"].includes(req.method)
+    ) {
+      return send(res, 400, {
+        code: "42501",
+        message: "roster_write_forbidden",
+        details: null,
+        hint: null,
+      });
+    }
+    if (table === "matches" && ["PATCH", "DELETE"].includes(req.method)) {
+      return send(res, 400, {
+        code: "42501",
+        message: "match_write_forbidden",
+        details: null,
+        hint: null,
+      });
+    }
 
     if (req.method === "GET") {
       let out = applyOrder(rows.filter(match), url.searchParams.get("order"));
@@ -455,7 +866,35 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST") {
       const body = await readBody(req);
       const user = authedUser(req);
-      const list = (Array.isArray(body) ? body : [body]).map((r) => withDefaults(table, r, user));
+      const input = Array.isArray(body) ? body : [body];
+      if (table === "matches") {
+        if (input.some((row) => !directMatchInsertAllowed(row, user))) {
+          return send(res, 400, {
+            code: "42501",
+            message: "match_write_forbidden",
+            details: null,
+            hint: null,
+          });
+        }
+
+        const occupied = new Set(
+          db.matches.map(matchCycleRoundCourtKey).filter((key) => key !== null),
+        );
+        for (const row of input) {
+          const key = matchCycleRoundCourtKey(row);
+          if (key !== null && occupied.has(key)) {
+            return send(res, 409, {
+              code: "23505",
+              message:
+                'duplicate key value violates unique constraint "matches_event_cycle_round_court_unique"',
+              details: null,
+              hint: null,
+            });
+          }
+          if (key !== null) occupied.add(key);
+        }
+      }
+      const list = input.map((r) => withDefaults(table, r, user));
       rows.push(...list);
       const prefer = req.headers.prefer || "";
       if (prefer.includes("return=representation")) {
@@ -468,7 +907,43 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "PATCH") {
       const body = await readBody(req);
       const targets = rows.filter(match);
-      targets.forEach((r) => Object.assign(r, body));
+      const replacements = targets.map((row) => ({ ...row, ...body }));
+      if (table === "events") {
+        for (let index = 0; index < targets.length; index++) {
+          const oldEvent = targets[index];
+          const newEvent = replacements[index];
+          const matches = db.matches.filter((candidate) => candidate.event_id === oldEvent.id);
+
+          if (oldEvent.status === "completed" && newEvent.status !== "completed") {
+            return send(res, 400, { code: "P0001", message: "event_locked" });
+          }
+          if (
+            oldEvent.status === "draft" &&
+            newEvent.status === "active" &&
+            matches.length === 0
+          ) {
+            return send(res, 400, { code: "P0001", message: "event_locked" });
+          }
+          if (
+            matches.length > 0 &&
+            (newEvent.organizer_id !== oldEvent.organizer_id ||
+              newEvent.format !== oldEvent.format ||
+              !jsonEqual(newEvent.settings, oldEvent.settings) ||
+              newEvent.status === "draft")
+          ) {
+            return send(res, 400, { code: "P0001", message: "event_locked" });
+          }
+          if (newEvent.status === "completed" && oldEvent.status !== "completed") {
+            if (oldEvent.status !== "active") {
+              return send(res, 400, { code: "P0001", message: "event_not_active" });
+            }
+            if (matches.some((candidate) => candidate.status !== "done")) {
+              return send(res, 400, { code: "P0001", message: "cycle_incomplete" });
+            }
+          }
+        }
+      }
+      targets.forEach((row, index) => Object.assign(row, replacements[index]));
       const prefer = req.headers.prefer || "";
       if (prefer.includes("return=representation")) {
         const out = pickColumns(targets, select);
