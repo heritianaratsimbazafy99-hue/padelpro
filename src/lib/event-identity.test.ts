@@ -9,6 +9,8 @@ function player(overrides: Partial<EventPlayer> & Pick<EventPlayer, "id" | "disp
     profile_id: null,
     level: 5,
     seed: 1,
+    preferred_side: null,
+    team_number: null,
     created_at: "2026-07-08T00:00:00.000Z",
     ...overrides,
   };

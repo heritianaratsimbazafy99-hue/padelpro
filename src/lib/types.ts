@@ -2,6 +2,8 @@ export type EventFormat = "americano" | "mexicano" | "tournament";
 export type EventStatus = "draft" | "active" | "completed";
 export type MatchStatus = "pending" | "done";
 export type PairingMode = "random" | "balanced";
+export type TeamMode = "remixed" | "fixed";
+export type CompositionMode = PairingMode | "manual";
 
 export type PreferredSide = "left" | "right" | "both";
 
@@ -28,6 +30,9 @@ export interface EventSettings {
   rounds: number;
   /** Team balancing strategy for pairings. */
   pairing: PairingMode;
+  team_mode?: TeamMode;
+  composition?: CompositionMode;
+  rounds_per_cycle?: number;
   /** Tournament: sets to win a match (1 = one set). */
   best_of?: number;
 }
@@ -54,6 +59,7 @@ export interface EventPlayer {
   seed: number; // tournament seeding order
   /** Copié du profil au claim ; utilisé par l'appariement équilibré. */
   preferred_side: PreferredSide | null;
+  team_number: number | null;
   created_at: string;
 }
 
@@ -61,6 +67,7 @@ export interface Match {
   id: string;
   event_id: string;
   round_number: number;
+  cycle_number: number;
   court: number;
   /** Player ids (event_players). Tournament: slots may be null until the bracket fills. */
   team1_p1: string | null;
@@ -81,6 +88,20 @@ export interface Match {
 export interface StandingRow {
   playerId: string;
   name: string;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  diff: number;
+}
+
+export interface TeamStandingRow {
+  teamNumber: number;
+  playerIds: [string, string];
+  names: [string, string];
+  label: string;
   played: number;
   wins: number;
   draws: number;
