@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   generateAmericanoSchedule,
+  generateRemixedCycle,
   generateMexicanoRound,
   auditSchedule,
   historyFromRounds,
@@ -13,6 +14,15 @@ import { buildBracket, seedOrder, composeTeams, nextPowerOfTwo } from "./bracket
 
 function makePlayers(n: number): EnginePlayer[] {
   return Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, level: (i % 10) + 1 }));
+}
+
+function mulberry32(seed: number) {
+  return () => {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 function assertRoundIntegrity(players: EnginePlayer[], schedule: PlannedRound[], courts: number) {
@@ -32,6 +42,86 @@ function assertRoundIntegrity(players: EnginePlayer[], schedule: PlannedRound[],
     assert.equal(seen.size, players.length, "chaque joueur est soit en match soit au repos");
   }
 }
+
+test("remixed cycle for 6 players is fair and continues global rounds", () => {
+  const players = makePlayers(6);
+  const first = generateRemixedCycle({
+    players,
+    roundsPerCycle: 3,
+    courts: 1,
+    mode: "random",
+    random: mulberry32(42),
+  });
+  const second = generateRemixedCycle({
+    players,
+    roundsPerCycle: 3,
+    courts: 1,
+    mode: "random",
+    previousRounds: first,
+    random: mulberry32(84),
+  });
+  assert.deepEqual(first.map((r) => r.roundNumber), [1, 2, 3]);
+  assert.deepEqual(second.map((r) => r.roundNumber), [4, 5, 6]);
+  assertRoundIntegrity(players, [...first, ...second], 1);
+  const audit = auditSchedule(players, [...first, ...second]);
+  assert.equal(audit.byeSpread, 0);
+  assert.ok(audit.maxPartnerCount <= 2);
+});
+
+test("remixed cycle for 10 players is fair on one and two courts", () => {
+  const players = makePlayers(10);
+  for (const [courts, expectedRests] of [[1, 3], [2, 1]] as const) {
+    const rounds = generateRemixedCycle({
+      players,
+      roundsPerCycle: 5,
+      courts,
+      mode: "random",
+      random: mulberry32(100 + courts),
+    });
+    assertRoundIntegrity(players, rounds, courts);
+    const history = historyFromRounds(rounds);
+    assert.deepEqual(
+      [...new Set(players.map((player) => history.byes.get(player.id) ?? 0))],
+      [expectedRests],
+    );
+    assert.equal(auditSchedule(players, rounds).repeatedPartners, 0);
+  }
+});
+
+test("remixed cycle supports the explicit 14-player target", () => {
+  const players = makePlayers(14);
+  const rounds = generateRemixedCycle({
+    players,
+    roundsPerCycle: 7,
+    courts: 2,
+    mode: "random",
+    attempts: 100,
+    random: mulberry32(142),
+  });
+  assert.equal(rounds.length, 7);
+  assertRoundIntegrity(players, rounds, 2);
+  const history = historyFromRounds(rounds);
+  assert.deepEqual(
+    [...new Set(players.map((player) => history.byes.get(player.id) ?? 0))],
+    [3],
+  );
+  const audit = auditSchedule(players, rounds);
+  assert.equal(audit.byeSpread, 0);
+  assert.equal(audit.repeatedPartners, 0);
+});
+
+test("a seeded remixed cycle is deterministic", () => {
+  const options = {
+    players: makePlayers(6),
+    roundsPerCycle: 3,
+    courts: 1,
+    mode: "balanced" as const,
+  };
+  assert.deepEqual(
+    generateRemixedCycle({ ...options, random: mulberry32(2026) }),
+    generateRemixedCycle({ ...options, random: mulberry32(2026) }),
+  );
+});
 
 test("americano 8 joueurs / 7 rounds / 2 terrains : rotation parfaite des partenaires", () => {
   const players = makePlayers(8);

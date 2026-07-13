@@ -41,6 +41,18 @@ export interface PlannedRound {
 
 export type PairingMode = "random" | "balanced";
 
+export type RandomSource = () => number;
+
+export interface GenerateRemixedCycleOptions {
+  players: readonly EnginePlayer[];
+  roundsPerCycle: number;
+  courts: number;
+  mode: PairingMode;
+  previousRounds?: readonly PlannedRound[];
+  attempts?: number;
+  random?: RandomSource;
+}
+
 const W_PARTNER = 1000; // rejouer avec le même partenaire : très pénalisé
 const W_OPPONENT = 40; // raffronter le même adversaire : pénalisé
 const W_BALANCE = 12; // mode équilibré : écart de niveau entre équipes
@@ -56,10 +68,10 @@ interface HistoryState {
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 const bump = (m: Map<string, number>, k: string, by = 1) => m.set(k, (m.get(k) ?? 0) + by);
 
-function shuffled<T>(arr: T[]): T[] {
+function shuffled<T>(arr: T[], random: RandomSource = Math.random): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
@@ -141,9 +153,14 @@ function bestSplit(
  * Priorité de repos : moins de byes cumulés, puis bye le plus ancien.
  * Garantie : l'écart de byes entre deux joueurs ne dépasse jamais 1.
  */
-function pickResting(players: EnginePlayer[], restingCount: number, h: HistoryState): string[] {
+function pickResting(
+  players: EnginePlayer[],
+  restingCount: number,
+  h: HistoryState,
+  random: RandomSource = Math.random,
+): string[] {
   if (restingCount <= 0) return [];
-  const order = shuffled(players).sort((a, b) => {
+  const order = shuffled(players, random).sort((a, b) => {
     const byeDiff = (h.byes.get(a.id) ?? 0) - (h.byes.get(b.id) ?? 0);
     if (byeDiff !== 0) return byeDiff;
     return (h.lastBye.get(a.id) ?? -1) - (h.lastBye.get(b.id) ?? -1);
@@ -179,10 +196,11 @@ function generateRound(
   mode: PairingMode,
   h: HistoryState,
   restarts = 60,
+  random: RandomSource = Math.random,
 ): PlannedRound {
   const infoOf = new Map(players.map((p) => [p.id, p]));
   const capacity = Math.min(courts * 4, Math.floor(players.length / 4) * 4);
-  const resting = pickResting(players, players.length - capacity, h);
+  const resting = pickResting(players, players.length - capacity, h, random);
   const restingSet = new Set(resting);
   const active = players.filter((p) => !restingSet.has(p.id)).map((p) => p.id);
 
@@ -190,7 +208,7 @@ function generateRound(
   let bestCost = Infinity;
 
   for (let r = 0; r < restarts && bestCost > 0; r++) {
-    const order = shuffled(active);
+    const order = shuffled(active, random);
     const matches: PlannedMatch[] = [];
     for (let i = 0; i < order.length; i += 4) {
       matches.push(bestSplit(order.slice(i, i + 4), matches.length + 1, h, mode, infoOf));
@@ -270,22 +288,6 @@ export function historyFromRounds(rounds: PlannedRound[]): HistoryState {
   return h;
 }
 
-function generateScheduleOnce(
-  players: EnginePlayer[],
-  rounds: number,
-  courts: number,
-  mode: PairingMode,
-): PlannedRound[] {
-  const h = emptyHistory();
-  const out: PlannedRound[] = [];
-  for (let r = 1; r <= rounds; r++) {
-    const round = generateRound(players, r, courts, mode, h);
-    commitRound(round, h);
-    out.push(round);
-  }
-  return out;
-}
-
 /** Score global d'un planning : moins il y a de répétitions, mieux c'est. */
 function scheduleScore(players: EnginePlayer[], schedule: PlannedRound[]): number {
   const h = historyFromRounds(schedule);
@@ -293,6 +295,47 @@ function scheduleScore(players: EnginePlayer[], schedule: PlannedRound[]): numbe
   for (const c of h.partner.values()) if (c > 1) score += W_PARTNER * (c - 1) * (c - 1);
   for (const c of h.opponent.values()) if (c > 1) score += W_OPPONENT * (c - 1) * (c - 1);
   return score;
+}
+
+export function generateRemixedCycle({
+  players,
+  roundsPerCycle,
+  courts,
+  mode,
+  previousRounds = [],
+  attempts = 25,
+  random = Math.random,
+}: GenerateRemixedCycleOptions): PlannedRound[] {
+  if (players.length < 4) throw new Error("Il faut au moins 4 joueurs.");
+  if (roundsPerCycle < 1) throw new Error("Il faut au moins un round.");
+  if (courts < 1) throw new Error("Il faut au moins un terrain.");
+  if (attempts < 1) throw new Error("Il faut au moins une tentative.");
+  const startRound = Math.max(0, ...previousRounds.map((round) => round.roundNumber)) + 1;
+  let best: PlannedRound[] | null = null;
+  let bestScore = Infinity;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const history = historyFromRounds([...previousRounds]);
+    const candidate: PlannedRound[] = [];
+    for (let offset = 0; offset < roundsPerCycle; offset++) {
+      const round = generateRound(
+        [...players],
+        startRound + offset,
+        courts,
+        mode,
+        history,
+        60,
+        random,
+      );
+      commitRound(round, history);
+      candidate.push(round);
+    }
+    const score = scheduleScore([...players], [...previousRounds, ...candidate]);
+    if (score < bestScore) {
+      bestScore = score;
+      best = candidate;
+    }
+  }
+  return best!;
 }
 
 /**
@@ -309,18 +352,7 @@ export function generateAmericanoSchedule(
   mode: PairingMode,
   attempts = 25,
 ): PlannedRound[] {
-  if (players.length < 4) throw new Error("Il faut au moins 4 joueurs.");
-  let best: PlannedRound[] | null = null;
-  let bestScore = Infinity;
-  for (let i = 0; i < attempts && bestScore > 0; i++) {
-    const candidate = generateScheduleOnce(players, rounds, courts, mode);
-    const score = scheduleScore(players, candidate);
-    if (score < bestScore) {
-      bestScore = score;
-      best = candidate;
-    }
-  }
-  return best!;
+  return generateRemixedCycle({ players, roundsPerCycle: rounds, courts, mode, attempts });
 }
 
 /**
