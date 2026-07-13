@@ -777,6 +777,14 @@ try {
 
   for (let round = 1; round <= 3; round++) {
     await completeRound(1, round, round);
+    if (round < 3) {
+      await expectVisible(
+        page.getByRole("button", {
+          name: `Voir R${round + 1}`,
+          exact: true,
+        }),
+      );
+    }
     const expectedActions = round === 3 ? 1 : 0;
     if (
       (await addCycleButton.count()) !== expectedActions ||
@@ -922,6 +930,14 @@ try {
 
   for (let localRound = 1; localRound <= 3; localRound++) {
     await completeRound(2, localRound, localRound + 3);
+    if (localRound < 3) {
+      await expectVisible(
+        page.getByRole("button", {
+          name: `Voir Cycle 2 · R${localRound + 1}`,
+          exact: true,
+        }),
+      );
+    }
     const expectedActions = localRound === 3 ? 1 : 0;
     if (
       (await addCycleButton.count()) !== expectedActions ||

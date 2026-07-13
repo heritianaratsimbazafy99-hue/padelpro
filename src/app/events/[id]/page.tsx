@@ -188,6 +188,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
   const firstOpenRound = matches.length === 0 ? 1 : activeRound;
   const displayRound = viewRound ?? (firstOpenRound === Infinity ? maxRound : firstOpenRound);
   const roundMatches = matches.filter((m) => m.round_number === displayRound);
+  const nextRoundMatch = matches.find((match) => match.round_number === displayRound + 1);
   const activePlayerIds = new Set(
     roundMatches.flatMap((match) => [
       match.team1_p1,
@@ -862,7 +863,9 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                     full
                     onClick={() => goToRound(displayRound + 1, maxRound, displayRound)}
                   >
-                    Voir le round {displayRound + 1}
+                    {event.format === "americano" && nextRoundMatch
+                      ? `Voir ${formatRoundLabel(nextRoundMatch, event.settings)}`
+                      : `Voir le round ${displayRound + 1}`}
                   </Button>
                 )}
               </div>
