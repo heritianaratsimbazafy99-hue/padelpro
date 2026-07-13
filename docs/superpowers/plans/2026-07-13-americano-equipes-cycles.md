@@ -34,7 +34,7 @@
 - `src/lib/engine/fixed-teams.ts` — composition et validation des binômes persistés.
 - `src/lib/engine/fixed-teams.test.ts` — composition manuelle, aléatoire et équilibrée.
 - `src/lib/engine/round-robin.ts` — championnat fixe et audit d'intégrité.
-- `src/lib/engine/round-robin.test.ts` — round-robin à 3, 5 et 6 équipes.
+- `src/lib/engine/round-robin.test.ts` — round-robin à 3, 5, 6 et 7 équipes, dont le cas cible à 14 joueurs.
 - `src/lib/engine/team-standings.ts` — classement collectif et départage direct.
 - `src/lib/engine/team-standings.test.ts` — statistiques, tris et multi-cycle.
 - `src/lib/event-planning.ts` — adaptation entre événements stockés et moteurs purs.
@@ -47,6 +47,7 @@
 
 **Modify**
 
+- `eslint.config.mjs` — exclusion des worktrees/outils cachés et de leurs artefacts générés.
 - `package.json` — commande `npm test`.
 - `src/lib/types.ts` — nouveaux réglages, `team_number`, `cycle_number`, classement d'équipe.
 - `src/lib/event-identity.test.ts` — valeurs par défaut des nouveaux champs du fixture.
@@ -73,6 +74,7 @@
 - Create: `src/lib/americano-settings.test.ts`
 - Modify: `src/lib/types.ts:1-91`
 - Modify: `src/lib/event-identity.test.ts:6-17`
+- Modify: `eslint.config.mjs:1-18`
 - Modify: `package.json:5-10`
 
 **Interfaces:**
@@ -237,16 +239,33 @@ export function currentCycleNumber(matches: ReadonlyArray<Pick<Match, "cycle_num
 
 Update the `EventPlayer` fixture with `preferred_side: null` and `team_number: null`. Add `"test": "node --test"` to `package.json`.
 
+Extend the existing `globalIgnores` in `eslint.config.mjs` so a nested worktree created by ChatGPT Work, Claude, Codex, or another local agent cannot make the root lint inspect generated `.next` bundles:
+
+```js
+globalIgnores([
+  ".next/**",
+  "out/**",
+  "build/**",
+  ".claude/worktrees/**",
+  ".codex/worktrees/**",
+  ".chatgpt/worktrees/**",
+  ".agents/worktrees/**",
+  "next-env.d.ts",
+]),
+```
+
+Keep the patterns scoped to nested worktrees; do not ignore the real root `src`, `scripts`, migrations, or configuration files.
+
 - [ ] **Step 4: Run focused and full tests**
 
-Run: `node --test src/lib/americano-settings.test.ts && npm test`
+Run: `node --test src/lib/americano-settings.test.ts && npm test && npm run lint`
 
-Expected: all settings tests pass; the existing 22 tests remain green.
+Expected: all settings tests pass; the existing 22 tests remain green; root lint exits 0 even when an ignored nested worktree contains its own `.next` directory.
 
 - [ ] **Step 5: Commit the contracts**
 
 ```bash
-git add package.json src/lib/types.ts src/lib/event-identity.test.ts src/lib/americano-settings.ts src/lib/americano-settings.test.ts
+git add eslint.config.mjs package.json src/lib/types.ts src/lib/event-identity.test.ts src/lib/americano-settings.ts src/lib/americano-settings.test.ts
 git commit -m "feat: add Americano cycle contracts"
 ```
 
@@ -283,6 +302,20 @@ test("remixed cycle duration balances appearances", () => {
   assert.equal(planRemixedCycle(8, 2).roundsPerCycle, 7);
   assert.equal(planRemixedCycle(12, 2).roundsPerCycle, 12);
   assert.equal(planRemixedCycle(12, 3).roundsPerCycle, 11);
+  assert.deepEqual(planRemixedCycle(14, 1), {
+    activePlayersPerRound: 4,
+    matchesPerRound: 1,
+    roundsPerCycle: 7,
+    matchesPerPlayer: 2,
+    restsPerPlayer: 5,
+  });
+  assert.deepEqual(planRemixedCycle(14, 2), {
+    activePlayersPerRound: 8,
+    matchesPerRound: 2,
+    roundsPerCycle: 7,
+    matchesPerPlayer: 4,
+    restsPerPlayer: 3,
+  });
 });
 
 test("fixed cycle duration accounts for court waves", () => {
@@ -291,6 +324,9 @@ test("fixed cycle duration accounts for court waves", () => {
   assert.equal(planFixedCycle(5, 2).roundsPerCycle, 5);
   assert.equal(planFixedCycle(6, 1).roundsPerCycle, 15);
   assert.equal(planFixedCycle(6, 2).roundsPerCycle, 10);
+  assert.equal(planFixedCycle(7, 1).roundsPerCycle, 21);
+  assert.equal(planFixedCycle(7, 2).roundsPerCycle, 14);
+  assert.equal(planFixedCycle(7, 3).roundsPerCycle, 7);
 });
 
 test("cycle planning rejects invalid capacity", () => {
@@ -442,6 +478,28 @@ test("remixed cycle for 10 players is fair on one and two courts", () => {
     );
     assert.equal(auditSchedule(players, rounds).repeatedPartners, 0);
   }
+});
+
+test("remixed cycle supports the explicit 14-player target", () => {
+  const players = makePlayers(14);
+  const rounds = generateRemixedCycle({
+    players,
+    roundsPerCycle: 7,
+    courts: 2,
+    mode: "random",
+    attempts: 100,
+    random: mulberry32(142),
+  });
+  assert.equal(rounds.length, 7);
+  assertRoundIntegrity(players, rounds, 2);
+  const history = historyFromRounds(rounds);
+  assert.deepEqual(
+    [...new Set(players.map((player) => history.byes.get(player.id) ?? 0))],
+    [3],
+  );
+  const audit = auditSchedule(players, rounds);
+  assert.equal(audit.byeSpread, 0);
+  assert.equal(audit.repeatedPartners, 0);
 });
 
 test("a seeded remixed cycle is deterministic", () => {
@@ -863,6 +921,28 @@ test("6 fixed teams respect two court waves without duplicate pairings", () => {
   });
 });
 
+test("14 players form 7 fixed teams with a complete two-court cycle", () => {
+  const input = teams(7);
+  const rounds = generateFixedCycle({
+    teams: input,
+    courts: 2,
+    cycleNumber: 1,
+    startRoundNumber: 1,
+  });
+  assert.equal(rounds.length, 14);
+  assert.deepEqual(auditFixedCycle(input, rounds, 2), {
+    matchCount: 21,
+    missingPairings: 0,
+    repeatedPairings: 0,
+    membershipConflicts: 0,
+    restConflicts: 0,
+    teamRoundConflicts: 0,
+    courtConflicts: 0,
+    playSpread: 0,
+    restSpread: 0,
+  });
+});
+
 test("audit rejects a mixed team and an incorrect resting list", () => {
   const input = teams(3);
   const rounds = generateFixedCycle({ teams: input, courts: 1, cycleNumber: 1, startRoundNumber: 1 });
@@ -1071,7 +1151,7 @@ Keep the audit independent of names and levels; it only verifies identities, pai
 
 Run: `node --test src/lib/engine/round-robin.test.ts src/lib/engine/cycle-planning.test.ts`
 
-Expected: all tests pass, including 3, 5 and 6-team court-wave cases.
+Expected: all tests pass, including 3, 5, 6 and 7-team court-wave cases; the 14-player target produces 21 unique matches over 14 physical rounds on two courts.
 
 - [ ] **Step 5: Commit the fixed scheduler**
 
@@ -2402,6 +2482,7 @@ git commit -m "feat: plan and append Americano cycles"
 
 **Files:**
 - Create: `src/components/fixed-team-composer.tsx`
+- Create: `scripts/e2e-team-cycles.mjs`
 - Modify: `src/components/ui.tsx:168-207`
 - Modify: `src/app/events/new/page.tsx:1-371`
 
