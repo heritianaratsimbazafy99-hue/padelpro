@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { EventPlayer, Match } from "../types.ts";
+import type { EventPlayer, Match, TeamStandingRow } from "../types.ts";
 import { computeTeamStandings } from "./team-standings.ts";
 
 const players: EventPlayer[] = [
@@ -22,8 +22,8 @@ const players: EventPlayer[] = [
 function result(
   id: string,
   round: number,
-  team1: [string, string],
-  team2: [string, string],
+  team1: [string | null, string | null],
+  team2: [string | null, string | null],
   score1: number | null,
   score2: number | null,
   cycle = 1,
@@ -46,6 +46,18 @@ function result(
     next_match_slot: null,
     reported_by: null,
     created_at: "2026-07-13T00:00:00.000Z",
+  };
+}
+
+function standingStats(row: TeamStandingRow) {
+  return {
+    played: row.played,
+    wins: row.wins,
+    draws: row.draws,
+    losses: row.losses,
+    pointsFor: row.pointsFor,
+    pointsAgainst: row.pointsAgainst,
+    diff: row.diff,
   };
 }
 
@@ -79,4 +91,68 @@ test("three fully tied teams use a stable label", () => {
     result("bc", 3, ["c", "d"], ["e", "f"], 12, 12),
   ]);
   assert.deepEqual(rows.map((row) => row.label), [...rows.map((row) => row.label)].sort());
+});
+
+test("matches with malformed fixed-team sides are ignored entirely", () => {
+  const malformed = [
+    result("missing-p2", 1, ["a", null], ["c", "d"], 14, 10),
+    result("unknown-p2", 2, ["a", "b"], ["c", "unknown"], 14, 10),
+    result("duplicate-p2", 3, ["a", "a"], ["c", "d"], 14, 10),
+    result("foreign-p2", 4, ["a", "b"], ["c", "e"], 14, 10),
+  ];
+  const empty = {
+    played: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    pointsFor: 0,
+    pointsAgainst: 0,
+    diff: 0,
+  };
+
+  for (const match of malformed) {
+    const rows = computeTeamStandings(players, [match]);
+    assert.deepEqual(rows.map(standingStats), [empty, empty, empty], match.id);
+  }
+});
+
+test("malformed direct confrontations do not break a two-team tie", () => {
+  const rows = computeTeamStandings(players, [
+    result("a-c", 1, ["a", "b"], ["e", "f"], 10, 5),
+    result("b-c", 2, ["c", "d"], ["e", "f"], 10, 5),
+    result("direct-missing", 3, ["c", null], ["a", "b"], 20, 0),
+    result("direct-unknown", 4, ["c", "unknown"], ["a", "b"], 20, 0),
+    result("direct-duplicate", 5, ["c", "c"], ["a", "b"], 20, 0),
+    result("direct-foreign", 6, ["c", "e"], ["a", "b"], 20, 0),
+  ]);
+
+  assert.deepEqual(rows.map((row) => row.teamNumber), [1, 2, 3]);
+});
+
+test("reversed orientation keeps complete team statistics symmetric", () => {
+  const rows = computeTeamStandings(players, [
+    result("reverse-win", 1, ["c", "d"], ["a", "b"], 10, 14),
+    result("reverse-draw", 2, ["c", "d"], ["a", "b"], 12, 12),
+  ]);
+  const first = rows.find((row) => row.teamNumber === 1)!;
+  const second = rows.find((row) => row.teamNumber === 2)!;
+
+  assert.deepEqual(standingStats(first), {
+    played: 2,
+    wins: 1,
+    draws: 1,
+    losses: 0,
+    pointsFor: 26,
+    pointsAgainst: 22,
+    diff: 4,
+  });
+  assert.deepEqual(standingStats(first), {
+    played: second.played,
+    wins: second.losses,
+    draws: second.draws,
+    losses: second.wins,
+    pointsFor: second.pointsAgainst,
+    pointsAgainst: second.pointsFor,
+    diff: -second.diff,
+  });
 });
