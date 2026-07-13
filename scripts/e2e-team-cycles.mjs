@@ -326,6 +326,13 @@ try {
       player.team_number,
     ]),
   );
+  if (
+    assignmentsBeforeSwap.Léa == null ||
+    assignmentsBeforeSwap.Sofia == null ||
+    assignmentsBeforeSwap.Léa === assignmentsBeforeSwap.Sofia
+  ) {
+    throw new Error("la précondition du swap exige deux équipes distinctes");
+  }
   await draftComposer
     .getByRole("button", { name: /^Sélectionner Léa, équipe / })
     .click();
@@ -343,6 +350,8 @@ try {
     ]),
   );
   if (
+    assignmentsAfterSwap.Léa === assignmentsBeforeSwap.Léa ||
+    assignmentsAfterSwap.Sofia === assignmentsBeforeSwap.Sofia ||
     assignmentsAfterSwap.Léa !== assignmentsBeforeSwap.Sofia ||
     assignmentsAfterSwap.Sofia !== assignmentsBeforeSwap.Léa ||
     swapPayload.p_rounds_per_cycle !== 3 ||
