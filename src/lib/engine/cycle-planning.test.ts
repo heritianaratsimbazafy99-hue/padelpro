@@ -48,3 +48,24 @@ test("cycle planning rejects invalid capacity", () => {
   assert.throws(() => planFixedCycle(1, 1), /au moins 2 équipes/i);
   assert.throws(() => planRemixedCycle(6, 0), /terrain/i);
 });
+
+test("cycle planning rejects unsafe counts", () => {
+  assert.throws(() => planRemixedCycle(4.5, 1), /nombre de joueurs.*entier sûr/i);
+  assert.throws(() => planRemixedCycle(6, 1.5), /nombre de terrains.*entier sûr/i);
+  assert.throws(() => planFixedCycle(3.5, 1), /nombre d'équipes.*entier sûr/i);
+  assert.throws(() => planFixedCycle(3, 1.5), /nombre de terrains.*entier sûr/i);
+
+  const unsafeCounts = [
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    Number.MAX_SAFE_INTEGER + 1,
+  ];
+
+  for (const invalid of unsafeCounts) {
+    assert.throws(() => planRemixedCycle(invalid, 1), /nombre de joueurs.*entier sûr/i);
+    assert.throws(() => planRemixedCycle(6, invalid), /nombre de terrains.*entier sûr/i);
+    assert.throws(() => planFixedCycle(invalid, 1), /nombre d'équipes.*entier sûr/i);
+    assert.throws(() => planFixedCycle(3, invalid), /nombre de terrains.*entier sûr/i);
+  }
+});

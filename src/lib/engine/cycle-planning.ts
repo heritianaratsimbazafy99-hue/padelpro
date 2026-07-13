@@ -15,7 +15,13 @@ export interface FixedCyclePlan {
   restsPerTeam: number;
 }
 
+function requireSafeIntegerCount(value: number, label: string): void {
+  if (!Number.isSafeInteger(value)) throw new Error(`${label} doit être un entier sûr.`);
+}
+
 export function planRemixedCycle(playerCount: number, courts: number): RemixedCyclePlan {
+  requireSafeIntegerCount(playerCount, "Le nombre de joueurs");
+  requireSafeIntegerCount(courts, "Le nombre de terrains");
   if (playerCount < 4) throw new Error("Il faut au moins 4 joueurs.");
   if (courts < 1) throw new Error("Il faut au moins un terrain.");
   const activePlayersPerRound = Math.min(courts * 4, Math.floor(playerCount / 4) * 4);
@@ -33,6 +39,8 @@ export function planRemixedCycle(playerCount: number, courts: number): RemixedCy
 }
 
 export function planFixedCycle(teamCount: number, courts: number): FixedCyclePlan {
+  requireSafeIntegerCount(teamCount, "Le nombre d'équipes");
+  requireSafeIntegerCount(courts, "Le nombre de terrains");
   if (teamCount < 2) throw new Error("Il faut au moins 2 équipes.");
   if (courts < 1) throw new Error("Il faut au moins un terrain.");
   const logicalRounds = teamCount % 2 === 0 ? teamCount - 1 : teamCount;
