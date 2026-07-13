@@ -15,7 +15,28 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useEvent } from "@/lib/use-event";
-import { completeEvent, deleteEvent, nextMexicanoRound, startEvent } from "@/lib/actions";
+import {
+  addAmericanoCycle,
+  completeEvent,
+  deleteEvent,
+  nextMexicanoRound,
+  replaceEventRoster,
+  startEvent,
+  type RosterPlayerInput,
+} from "@/lib/actions";
+import {
+  currentCycleNumber,
+  formatRoundLabel,
+  resolveAmericanoSettings,
+} from "@/lib/americano-settings";
+import { planFixedCycle, planRemixedCycle } from "@/lib/engine/cycle-planning";
+import {
+  assignmentsFromTeams,
+  composeFixedTeams,
+  fixedTeamsFromAssignments,
+  swapAssignments,
+  type TeamAssignments,
+} from "@/lib/engine/fixed-teams";
 import { getPlayerReporterName, resolveEventPlayerId } from "@/lib/event-identity";
 import { FORMAT_LABELS, friendlyError } from "@/lib/utils";
 import type { Match } from "@/lib/types";
@@ -38,6 +59,7 @@ import { Standings } from "@/components/standings";
 import { QRShare } from "@/components/qr-share";
 import { BracketView } from "@/components/bracket-view";
 import { Podium } from "@/components/podium";
+import { FixedTeamComposer } from "@/components/fixed-team-composer";
 
 type Tab = "matches" | "standings" | "players";
 
@@ -57,6 +79,8 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
   const [organizerPlayerId, setOrganizerPlayerId] = useState<string | null>(null);
   const [viewRound, setViewRound] = useState<number | null>(null);
   const [roundAnim, setRoundAnim] = useState<"l" | "r" | null>(null);
+  const [draftAssignments, setDraftAssignments] = useState<TeamAssignments>({});
+  const [composerGeneration, setComposerGeneration] = useState(0);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   const playerName = useMemo(() => {
@@ -89,6 +113,19 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
       cancelled = true;
     };
   }, [event, organizerStorageKey, players, supabase]);
+
+  useEffect(() => {
+    if (!event || event.status !== "draft") return;
+    const nextAssignments = Object.fromEntries(
+      players
+        .filter((player) => player.team_number != null)
+        .map((player) => [player.id, player.team_number!]),
+    );
+    // Le roster chargé est la source de vérité après chaque RPC atomique.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDraftAssignments(nextAssignments);
+    setComposerGeneration((generation) => generation + 1);
+  }, [event, players]);
 
   /* Navigation entre rounds : clic sur les pastilles ou swipe horizontal
      (mobile) — le contenu glisse dans le sens du geste. */
@@ -127,62 +164,320 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
       </>
     );
   }
+  const loadedEvent = event;
 
   const isDraft = event.status === "draft";
   const isActive = event.status === "active";
   const isDone = event.status === "completed";
   const isPointsBased = event.format !== "tournament";
+  const americanoSettings =
+    event.format === "americano" ? resolveAmericanoSettings(event.settings) : null;
+  const isFixedAmericano = americanoSettings?.teamMode === "fixed";
+  const currentCycle = currentCycleNumber(matches);
+  const currentCycleMatches = matches.filter(
+    (match) => (match.cycle_number ?? 1) === currentCycle,
+  );
 
   const maxRound = Math.max(0, ...matches.map((m) => m.round_number));
-  const firstOpenRound =
-    matches.length === 0
-      ? 1
-      : (matches
-          .filter((m) => m.status === "pending")
-          .reduce((min, m) => Math.min(min, m.round_number), Infinity) as number);
+  const activeRound = Math.min(
+    Infinity,
+    ...matches
+      .filter((match) => match.status === "pending")
+      .map((match) => match.round_number),
+  );
+  const firstOpenRound = matches.length === 0 ? 1 : activeRound;
   const displayRound = viewRound ?? (firstOpenRound === Infinity ? maxRound : firstOpenRound);
   const roundMatches = matches.filter((m) => m.round_number === displayRound);
-  const restingIds = players
-    .filter(
-      (p) =>
-        !roundMatches.some((m) =>
-          [m.team1_p1, m.team1_p2, m.team2_p1, m.team2_p2].includes(p.id),
-        ),
-    )
-    .map((p) => p.display_name);
-  const allDone = matches.length > 0 && matches.every((m) => m.status === "done");
+  const activePlayerIds = new Set(
+    roundMatches.flatMap((match) => [
+      match.team1_p1,
+      match.team1_p2,
+      match.team2_p1,
+      match.team2_p2,
+    ]),
+  );
+  const fixedGroups = new Map<number, typeof players>();
+  if (isFixedAmericano) {
+    for (const player of players) {
+      if (player.team_number == null) continue;
+      fixedGroups.set(player.team_number, [
+        ...(fixedGroups.get(player.team_number) ?? []),
+        player,
+      ]);
+    }
+  }
+  const restingLabels = isFixedAmericano
+    ? [...fixedGroups.entries()]
+        .filter(
+          ([, members]) =>
+            members.length === 2 && members.every((member) => !activePlayerIds.has(member.id)),
+        )
+        .sort(([first], [second]) => first - second)
+        .map(
+          ([teamNumber, members]) =>
+            `Équipe ${teamNumber} · ${members.map((member) => member.display_name).join(" & ")}`,
+        )
+    : players
+        .filter((player) => !activePlayerIds.has(player.id))
+        .map((player) => player.display_name);
+  const allDone =
+    matches.length > 0 &&
+    matches.every(
+      (match) => match.status === "done" && match.score1 != null && match.score2 != null,
+    );
+  const currentCycleDone =
+    currentCycleMatches.length > 0 &&
+    currentCycleMatches.every(
+      (match) => match.status === "done" && match.score1 != null && match.score2 != null,
+    );
   const currentRoundDone = roundMatches.length > 0 && roundMatches.every((m) => m.status === "done");
   const mexicanoCanAdvance =
     event.format === "mexicano" && isActive && allDone && maxRound < event.settings.rounds;
+  const activeRoundMatches = matches.filter((match) => match.round_number === activeRound);
+  const organizerCurrentMatch =
+    organizerPlayerId == null
+      ? undefined
+      : activeRoundMatches.find((match) =>
+          [match.team1_p1, match.team1_p2, match.team2_p1, match.team2_p2].includes(
+            organizerPlayerId,
+          ),
+        );
+  const organizerNextMatch =
+    organizerPlayerId == null
+      ? undefined
+      : matches
+          .filter(
+            (match) => match.status === "pending" && match.round_number >= activeRound,
+          )
+          .sort(
+            (first, second) =>
+              first.round_number - second.round_number || first.court - second.court,
+          )
+          .find((match) =>
+            [match.team1_p1, match.team1_p2, match.team2_p1, match.team2_p2].includes(
+              organizerPlayerId,
+            ),
+          );
+  const draftRoster: RosterPlayerInput[] = players.map((player, index) => ({
+    id: player.id,
+    display_name: player.display_name,
+    level: player.level,
+    seed: index + 1,
+    preferred_side: player.preferred_side,
+    team_number: player.team_number,
+  }));
+  let fixedDraftError: string | null = null;
+  if (isDraft && isFixedAmericano) {
+    try {
+      fixedTeamsFromAssignments(
+        draftRoster.map((player) => ({
+          id: player.id,
+          level: player.level,
+          side: player.preferred_side ?? undefined,
+          teamNumber: draftAssignments[player.id] ?? null,
+        })),
+      );
+    } catch (draftError) {
+      fixedDraftError =
+        draftError instanceof Error
+          ? draftError.message
+          : "La composition des équipes est invalide.";
+    }
+  }
 
-  async function run(action: () => Promise<string | null>) {
+  async function run(action: () => Promise<string | null>): Promise<boolean> {
+    if (busy) return false;
     setBusy(true);
     setError(null);
-    const err = await action();
-    if (err) setError(friendlyError(err));
-    await refresh();
-    setBusy(false);
-    setConfirmAction(null);
+    let success = false;
+    try {
+      const actionError = await action();
+      if (actionError) setError(friendlyError(actionError));
+      else success = true;
+    } catch (actionError) {
+      setError(
+        friendlyError(
+          actionError instanceof Error ? actionError.message : "Une erreur est survenue.",
+        ),
+      );
+    } finally {
+      try {
+        await refresh();
+      } finally {
+        setBusy(false);
+      }
+    }
+    if (success) setConfirmAction(null);
+    return success;
+  }
+
+  function automaticRoundsForDraftRoster(
+    nextPlayers: readonly RosterPlayerInput[],
+    nextAssignments: TeamAssignments,
+  ): number | null {
+    if (loadedEvent.format !== "americano") return null;
+    const settings = resolveAmericanoSettings(loadedEvent.settings);
+    if (settings.legacy || nextPlayers.length < 4) return null;
+
+    if (settings.teamMode === "remixed") {
+      return planRemixedCycle(nextPlayers.length, loadedEvent.settings.courts).roundsPerCycle;
+    }
+
+    try {
+      fixedTeamsFromAssignments(
+        nextPlayers.map((player) => ({
+          id: player.id,
+          level: player.level,
+          side: player.preferred_side ?? undefined,
+          teamNumber: nextAssignments[player.id] ?? null,
+        })),
+      );
+      return planFixedCycle(
+        nextPlayers.length / 2,
+        loadedEvent.settings.courts,
+      ).roundsPerCycle;
+    } catch {
+      return null;
+    }
+  }
+
+  async function persistDraftRoster(
+    nextPlayers: readonly RosterPlayerInput[],
+    nextAssignments: TeamAssignments,
+  ): Promise<boolean> {
+    if (busy) return false;
+    setBusy(true);
+    setError(null);
+    const fixed =
+      loadedEvent.format === "americano" &&
+      resolveAmericanoSettings(loadedEvent.settings).teamMode === "fixed";
+    const payload = nextPlayers.map((player, index) => ({
+      ...player,
+      seed: index + 1,
+      team_number: fixed ? nextAssignments[player.id] ?? null : null,
+    }));
+    let success = false;
+    try {
+      const rosterError = await replaceEventRoster(
+        loadedEvent.id,
+        payload,
+        automaticRoundsForDraftRoster(payload, nextAssignments),
+      );
+      if (rosterError) {
+        setToast({ message: friendlyError(rosterError), tone: "danger" });
+      } else {
+        setDraftAssignments(nextAssignments);
+        setComposerGeneration((generation) => generation + 1);
+        success = true;
+      }
+    } catch (rosterError) {
+      setToast({
+        message: friendlyError(
+          rosterError instanceof Error ? rosterError.message : "Une erreur est survenue.",
+        ),
+        tone: "danger",
+      });
+    } finally {
+      try {
+        await refresh();
+      } finally {
+        setBusy(false);
+      }
+    }
+    return success;
   }
 
   async function addPlayer(e: React.FormEvent) {
     e.preventDefault();
     const name = newPlayer.trim();
-    if (!name) return;
-    const { error } = await supabase.from("event_players").insert({
-      event_id: event!.id,
-      display_name: name,
-      seed: players.length + 1,
-    });
-    if (error) {
-      setError(
-        error.message.includes("duplicate") ? "Ce nom est déjà dans la liste." : error.message,
-      );
-      return;
+    if (!name || busy) return;
+    const nextPlayers: RosterPlayerInput[] = [
+      ...draftRoster,
+      {
+        id: crypto.randomUUID(),
+        display_name: name,
+        level: 5,
+        seed: draftRoster.length + 1,
+        preferred_side: null,
+        team_number: null,
+      },
+    ];
+    const nextAssignments = isFixedAmericano ? {} : draftAssignments;
+    if (await persistDraftRoster(nextPlayers, nextAssignments)) setNewPlayer("");
+  }
+
+  async function removePlayer(playerId: string) {
+    if (busy) return;
+    const nextPlayers = draftRoster.filter((player) => player.id !== playerId);
+    const nextAssignments = isFixedAmericano ? {} : draftAssignments;
+    await persistDraftRoster(nextPlayers, nextAssignments);
+  }
+
+  async function recomposeDraftTeams() {
+    if (!isFixedAmericano || !americanoSettings || busy) return;
+    try {
+      const nextAssignments =
+        americanoSettings.composition === "manual"
+          ? Object.fromEntries(
+              draftRoster.map((player, index) => [player.id, Math.floor(index / 2) + 1]),
+            )
+          : assignmentsFromTeams(
+              composeFixedTeams(
+                draftRoster.map((player) => ({
+                  id: player.id,
+                  level: player.level,
+                  side: player.preferred_side ?? undefined,
+                })),
+                americanoSettings.composition,
+              ),
+            );
+      await persistDraftRoster(draftRoster, nextAssignments);
+    } catch (compositionError) {
+      setToast({
+        message:
+          compositionError instanceof Error
+            ? compositionError.message
+            : "La composition des équipes est invalide.",
+        tone: "danger",
+      });
     }
-    setNewPlayer("");
-    setError(null);
-    refresh();
+  }
+
+  async function swapDraftPlayers(firstId: string, secondId: string) {
+    if (busy) return;
+    await persistDraftRoster(
+      draftRoster,
+      swapAssignments(draftAssignments, firstId, secondId),
+    );
+  }
+
+  async function startDraftEvent() {
+    if (busy) return;
+    if (isFixedAmericano) {
+      try {
+        fixedTeamsFromAssignments(
+          draftRoster.map((player) => ({
+            id: player.id,
+            level: player.level,
+            side: player.preferred_side ?? undefined,
+            teamNumber: draftAssignments[player.id] ?? null,
+          })),
+        );
+      } catch (launchError) {
+        setError(
+          launchError instanceof Error
+            ? launchError.message
+            : "La composition des équipes est invalide.",
+        );
+        return;
+      }
+    }
+    await run(() => startEvent(loadedEvent, players));
+  }
+
+  async function addCycle() {
+    const success = await run(() => addAmericanoCycle(loadedEvent, players, matches));
+    if (success) setViewRound(null);
   }
 
   async function selectOrganizerPlayer(playerId: string | null) {
@@ -235,6 +530,14 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
           {isDraft && <Badge tone="muted">Brouillon</Badge>}
           {isActive && <Badge tone="warning">En cours</Badge>}
           {isDone && <Badge tone="success">Terminé</Badge>}
+          {americanoSettings && (
+            <Badge tone="info">
+              {americanoSettings.teamMode === "fixed"
+                ? "Équipes fixes"
+                : "Équipes remixées"}
+            </Badge>
+          )}
+          {americanoSettings && !isDraft && <Badge tone="muted">Cycle {currentCycle}</Badge>}
           <Badge tone="muted">
             <Users className="size-3.5" aria-hidden /> {players.length}
           </Badge>
@@ -263,6 +566,25 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                     ? `Tu es sélectionné comme ${organizerPlayer.display_name}.`
                     : "Choisis ton nom pour voir tes matchs et annoncer les scores en tant que joueur."}
                 </p>
+                {organizerPlayer && isActive && (
+                  <p className="mt-1 text-xs font-semibold text-ink-muted">
+                    {activeRound === Infinity
+                      ? "Cycle terminé — en attente de l'organisateur"
+                      : organizerCurrentMatch
+                        ? `Ton match de ce round est sur le terrain ${organizerCurrentMatch.court}.`
+                        : isFixedAmericano
+                          ? "Ton équipe est au repos ce round"
+                          : "Tu es au repos ce round"}
+                    {!organizerCurrentMatch && organizerNextMatch && (
+                      <span className="block text-ink-faint">
+                        Prochain match :{" "}
+                        {event.format === "americano"
+                          ? formatRoundLabel(organizerNextMatch, event.settings)
+                          : `Round ${organizerNextMatch.round_number}`}
+                      </span>
+                    )}
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
@@ -307,8 +629,10 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
             <div className="bg-surface border border-border rounded-(--radius-card) p-4">
               <h2 className="font-bold mb-1">Prêt à lancer ?</h2>
               <p className="text-sm text-ink-muted leading-relaxed">
-                {event.format === "americano" &&
+                {event.format === "americano" && !isFixedAmericano &&
                   `${event.settings.rounds} rounds seront générés avec une rotation équitable des partenaires et des repos.`}
+                {event.format === "americano" && isFixedAmericano &&
+                  `${event.settings.rounds} rounds formeront un championnat complet entre les équipes ci-dessous.`}
                 {event.format === "mexicano" &&
                   "Le round 1 sera généré ; les suivants se formeront selon le classement."}
                 {event.format === "tournament" &&
@@ -323,8 +647,15 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                 onChange={(e) => setNewPlayer(e.target.value)}
                 placeholder="Ajouter un joueur"
                 maxLength={40}
+                disabled={busy}
               />
-              <Button type="submit" variant="secondary" aria-label="Ajouter" className="shrink-0 w-12 px-0">
+              <Button
+                type="submit"
+                variant="secondary"
+                aria-label="Ajouter"
+                className="shrink-0 w-12 px-0"
+                disabled={busy}
+              >
                 <Plus className="size-5" />
               </Button>
             </form>
@@ -337,15 +668,15 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                 >
                   <Avatar name={p.display_name} size="sm" />
                   <span className="flex-1 text-sm font-semibold truncate">{p.display_name}</span>
-                  {event.settings.pairing === "balanced" && (
+                  {(americanoSettings?.composition === "balanced" ||
+                    (!americanoSettings && event.settings.pairing === "balanced")) && (
                     <Badge tone="muted">Niv. {p.level}</Badge>
                   )}
                   <button
+                    type="button"
                     aria-label={`Retirer ${p.display_name}`}
-                    onClick={async () => {
-                      await supabase.from("event_players").delete().eq("id", p.id);
-                      refresh();
-                    }}
+                    disabled={busy}
+                    onClick={() => removePlayer(p.id)}
                     className="size-9 rounded-lg flex items-center justify-center text-ink-faint hover:text-danger hover:bg-danger/10 cursor-pointer transition-colors"
                   >
                     <Trash2 className="size-4" />
@@ -354,14 +685,52 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
               ))}
             </ul>
 
+            {isFixedAmericano && !fixedDraftError && (
+              <div className="rounded-(--radius-card) border border-border bg-surface p-4">
+                <FixedTeamComposer
+                  key={composerGeneration}
+                  players={players.map((player) => ({
+                    id: player.id,
+                    name: player.display_name,
+                  }))}
+                  assignments={draftAssignments}
+                  editable={americanoSettings?.composition === "manual" && !busy}
+                  onSwap={(firstId, secondId) => {
+                    void swapDraftPlayers(firstId, secondId);
+                  }}
+                  onRegenerate={
+                    americanoSettings?.composition === "manual"
+                      ? undefined
+                      : () => {
+                          void recomposeDraftTeams();
+                        }
+                  }
+                />
+              </div>
+            )}
+
+            {isFixedAmericano && fixedDraftError && (
+              <Button
+                type="button"
+                variant="secondary"
+                full
+                disabled={busy || players.length < 4 || players.length % 2 !== 0}
+                onClick={() => void recomposeDraftTeams()}
+              >
+                Recomposer les équipes
+              </Button>
+            )}
+
             <Button
               size="lg"
               full
               loading={busy}
               disabled={
-                players.length < 4 || (event.format === "tournament" && players.length % 2 !== 0)
+                players.length < 4 ||
+                (event.format === "tournament" && players.length % 2 !== 0) ||
+                (isFixedAmericano && fixedDraftError !== null)
               }
-              onClick={() => run(() => startEvent(event, players))}
+              onClick={() => void startDraftEvent()}
             >
               <Play className="size-5" />
               Lancer l&apos;événement
@@ -374,6 +743,9 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                 Nombre pair de joueurs requis pour composer les équipes.
               </p>
             )}
+            {isFixedAmericano && fixedDraftError && (
+              <p className="text-center text-sm text-warning">{fixedDraftError}</p>
+            )}
           </section>
         )}
 
@@ -382,6 +754,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
           <>
             <Segmented<Tab>
               className="mb-5"
+              ariaLabel="Navigation de l'événement"
               options={[
                 { value: "matches", label: event.format === "tournament" ? "Tableau" : "Matchs" },
                 { value: "standings", label: "Classement" },
@@ -405,9 +778,12 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                 {/* Sélecteur de round */}
                 <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-4 px-4">
                   {Array.from({ length: maxRound }, (_, i) => i + 1).map((r) => {
-                    const done = matches
-                      .filter((m) => m.round_number === r)
-                      .every((m) => m.status === "done");
+                    const matchesInRound = matches.filter((m) => m.round_number === r);
+                    const done = matchesInRound.every((m) => m.status === "done");
+                    const roundLabel =
+                      event.format === "americano" && matchesInRound[0]
+                        ? formatRoundLabel(matchesInRound[0], event.settings)
+                        : `R${r}`;
                     return (
                       <button
                         key={r}
@@ -421,7 +797,7 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                               : "bg-surface text-ink-muted border-border-strong"
                         }`}
                       >
-                        R{r}
+                        {roundLabel}
                         {done && <CheckCircle2 className="inline size-3.5 ml-1 -mt-0.5" aria-label="terminé" />}
                       </button>
                     );
@@ -454,17 +830,22 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                         match={m}
                         playerName={playerName}
                         meId={organizerPlayerId}
+                        roundTag={
+                          event.format === "americano"
+                            ? formatRoundLabel(m, event.settings)
+                            : `R${m.round_number}`
+                        }
                         onClick={isActive ? () => setScoringMatch(m) : undefined}
                       />
                     </div>
                   ))}
 
-                  {restingIds.length > 0 && (
+                  {restingLabels.length > 0 && (
                     <div className="flex items-center gap-2.5 bg-surface-2 border border-border rounded-(--radius-field) px-4 py-3">
                       <Coffee className="size-4 text-ink-faint shrink-0" aria-hidden />
                       <p className="text-sm text-ink-muted">
                         <span className="font-semibold text-ink">Au repos :</span>{" "}
-                        {restingIds.join(", ")}
+                        {restingLabels.join(", ")}
                       </p>
                     </div>
                   )}
@@ -494,7 +875,12 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                   body="Pour un tournoi, la progression se lit dans le tableau. Le podium s'affichera à la fin."
                 />
               ) : (
-                <Standings players={players} matches={matches} meId={organizerPlayerId} />
+                <Standings
+                  event={event}
+                  players={players}
+                  matches={matches}
+                  meId={organizerPlayerId}
+                />
               ))}
 
             {tab === "players" && (
@@ -514,7 +900,23 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
             )}
 
             {/* Actions organisateur */}
-            {isActive && allDone && !mexicanoCanAdvance && (
+            {isActive && event.format === "americano" && currentCycleDone && (
+              <div className="mt-6 flex flex-col gap-2">
+                <Button size="lg" full loading={busy} onClick={() => void addCycle()}>
+                  Ajouter un cycle
+                </Button>
+                <Button
+                  variant="secondary"
+                  full
+                  disabled={busy}
+                  onClick={() => setConfirmAction("complete")}
+                >
+                  <Flag className="size-5" />
+                  Terminer l&apos;événement
+                </Button>
+              </div>
+            )}
+            {isActive && event.format !== "americano" && allDone && !mexicanoCanAdvance && (
               <Button
                 size="lg"
                 full
@@ -526,20 +928,16 @@ export default function EventAdminPage({ params }: { params: Promise<{ id: strin
                 Terminer et afficher le podium
               </Button>
             )}
-            {isActive && !allDone && (
-              <Button
-                variant="ghost"
-                full
-                className="mt-6"
-                onClick={() => setConfirmAction("complete")}
-              >
-                Terminer l&apos;événement maintenant
-              </Button>
-            )}
           </>
         )}
 
-        <Button variant="danger" full className="mt-4" onClick={() => setConfirmAction("delete")}>
+        <Button
+          variant="danger"
+          full
+          className="mt-4"
+          disabled={busy}
+          onClick={() => setConfirmAction("delete")}
+        >
           <Trash2 className="size-4" />
           Supprimer l&apos;événement
         </Button>

@@ -63,10 +63,19 @@ export function MatchCard({
     !!meId &&
     [match.team1_p1, match.team1_p2, match.team2_p1, match.team2_p2].includes(meId);
   const inTeam1 = !!meId && [match.team1_p1, match.team1_p2].includes(meId);
+  const accessibleName = done
+    ? `${t1.join(" et ")} contre ${t2.join(" et ")}, ${match.score1} à ${match.score2}, terrain ${match.court}`
+    : `Annoncer le score : ${t1.join(" et ")} contre ${t2.join(" et ")}, terrain ${match.court}`;
 
   return (
     <button
       type="button"
+      aria-label={accessibleName}
+      data-match-id={match.id}
+      data-match-status={match.status}
+      data-cycle-number={match.cycle_number ?? 1}
+      data-round-number={match.round_number}
+      data-court={match.court}
       onClick={onClick}
       disabled={!onClick}
       className={`w-full text-left bg-surface border rounded-(--radius-card) p-4 transition-all duration-150 ${

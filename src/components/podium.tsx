@@ -2,7 +2,9 @@
 
 import { Crown, Trophy } from "lucide-react";
 import type { EventPlayer, Match, PadelEvent } from "@/lib/types";
+import { resolveAmericanoSettings } from "@/lib/americano-settings";
 import { computeStandings } from "@/lib/engine/standings";
+import { computeTeamStandings } from "@/lib/engine/team-standings";
 import { Avatar } from "./ui";
 import { Confetti } from "./motion";
 
@@ -77,18 +79,52 @@ export function Podium({
   }
 
   /* ---- Points : estrade à trois colonnes ---- */
-  const rows = computeStandings(players, matches).slice(0, 3);
-  if (rows.length === 0) return null;
+  const fixed =
+    event.format === "americano" &&
+    resolveAmericanoSettings(event.settings).teamMode === "fixed";
+  const entries = fixed
+    ? computeTeamStandings(players, matches)
+        .slice(0, 3)
+        .map((row) => ({
+          id: `team-${row.teamNumber}`,
+          names: row.names,
+          label: row.label,
+          metric: `${row.wins} victoire${row.wins === 1 ? "" : "s"}`,
+        }))
+    : computeStandings(players, matches)
+        .slice(0, 3)
+        .map((row) => ({
+          id: row.playerId,
+          names: [row.name],
+          label: row.name,
+          metric: `${row.pointsFor} pts`,
+        }));
+  if (entries.length === 0) return null;
 
   // Ordre visuel : 2ᵉ · 1ᵉʳ · 3ᵉ (l'estrade classique)
-  const slots = [rows[1], rows[0], rows[2]].filter(Boolean);
+  const slots = [entries[1], entries[0], entries[2]].filter(Boolean);
   const conf: Record<string, { h: string; bar: string; rank: number; delay: number }> = {
-    [rows[0]?.playerId ?? "_1"]: { h: "9.5rem", bar: "bg-lime text-on-lime", rank: 1, delay: 2 },
-    ...(rows[1] && {
-      [rows[1].playerId]: { h: "6.5rem", bar: "bg-surface-3 text-ink", rank: 2, delay: 1 },
+    [entries[0]?.id ?? "_1"]: {
+      h: "9.5rem",
+      bar: "bg-lime text-on-lime",
+      rank: 1,
+      delay: 2,
+    },
+    ...(entries[1] && {
+      [entries[1].id]: {
+        h: "6.5rem",
+        bar: "bg-surface-3 text-ink",
+        rank: 2,
+        delay: 1,
+      },
     }),
-    ...(rows[2] && {
-      [rows[2].playerId]: { h: "4.75rem", bar: "bg-amber-600/25 text-amber-900", rank: 3, delay: 0 },
+    ...(entries[2] && {
+      [entries[2].id]: {
+        h: "4.75rem",
+        bar: "bg-amber-600/25 text-amber-900",
+        rank: 3,
+        delay: 0,
+      },
     }),
   };
 
@@ -102,21 +138,29 @@ export function Podium({
       <div className="bg-surface border border-border rounded-(--radius-card) px-4 pt-6 pb-4 shadow-club overflow-hidden">
         <div className="flex items-end justify-center gap-3">
           {slots.map((r) => {
-            const c = conf[r.playerId];
+            const c = conf[r.id];
             return (
-              <div key={r.playerId} className="flex flex-col items-center gap-2 w-full max-w-28 min-w-0">
+              <div key={r.id} className="flex flex-col items-center gap-2 w-full max-w-28 min-w-0">
                 {c.rank === 1 && (
                   <Crown className="size-5 text-clay animate-float" aria-hidden />
                 )}
-                <Avatar name={r.name} size={c.rank === 1 ? "lg" : "md"} />
-                <p className="text-xs font-bold truncate max-w-full">{r.name}</p>
+                <div className="flex -space-x-2">
+                  {r.names.map((name) => (
+                    <Avatar
+                      key={name}
+                      name={name}
+                      size={c.rank === 1 ? "lg" : "md"}
+                    />
+                  ))}
+                </div>
+                <p className="max-w-full truncate text-xs font-bold">{r.label}</p>
                 <div
                   className={`animate-podium-rise w-full rounded-t-2xl flex flex-col items-center justify-start pt-2.5 font-display font-bold ${c.bar}`}
                   style={{ height: c.h, "--i": c.delay } as React.CSSProperties}
                 >
                   <span className="text-xl leading-none">{c.rank}</span>
                   <span className="tnum text-[0.7rem] font-sans font-semibold opacity-80 mt-1">
-                    {r.pointsFor} pts
+                    {r.metric}
                   </span>
                 </div>
               </div>

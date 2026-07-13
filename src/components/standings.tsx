@@ -2,9 +2,11 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { Crown } from "lucide-react";
-import type { EventPlayer, Match } from "@/lib/types";
+import type { EventPlayer, Match, PadelEvent } from "@/lib/types";
+import { resolveAmericanoSettings } from "@/lib/americano-settings";
 import { computeStandings } from "@/lib/engine/standings";
 import { Avatar, PopValue } from "./ui";
+import { TeamStandings } from "./team-standings";
 
 const medalTones = [
   "bg-lime/15 text-court border-lime/30",
@@ -12,8 +14,37 @@ const medalTones = [
   "bg-amber-600/15 text-amber-700 border-amber-600/30",
 ];
 
-/** Classement live americano/mexicano : points cumulés, victoires, diff. */
 export function Standings({
+  event,
+  players,
+  matches,
+  meId,
+  compact,
+}: {
+  event: PadelEvent;
+  players: EventPlayer[];
+  matches: Match[];
+  meId?: string | null;
+  compact?: boolean;
+}) {
+  if (
+    event.format === "americano" &&
+    resolveAmericanoSettings(event.settings).teamMode === "fixed"
+  ) {
+    return <TeamStandings players={players} matches={matches} meId={meId} />;
+  }
+  return (
+    <IndividualStandings
+      players={players}
+      matches={matches}
+      meId={meId}
+      compact={compact}
+    />
+  );
+}
+
+/** Classement live americano/mexicano : points cumulés, victoires, diff. */
+function IndividualStandings({
   players,
   matches,
   meId,

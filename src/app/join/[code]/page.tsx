@@ -5,6 +5,11 @@ import Link from "next/link";
 import { Clock, PartyPopper, UserCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useEvent } from "@/lib/use-event";
+import {
+  currentCycleNumber,
+  formatRoundLabel,
+  resolveAmericanoSettings,
+} from "@/lib/americano-settings";
 import { FORMAT_LABELS, friendlyError } from "@/lib/utils";
 import type { Match } from "@/lib/types";
 import { Logo } from "@/components/logo";
@@ -157,14 +162,38 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
   const avatarOf = (p: { profile_id: string | null }) =>
     p.profile_id ? avatars.get(p.profile_id) : undefined;
 
+  const americanoSettings =
+    event.format === "americano" ? resolveAmericanoSettings(event.settings) : null;
+  const isFixedAmericano = americanoSettings?.teamMode === "fixed";
+  const currentCycle = currentCycleNumber(matches);
+  const activeRound = Math.min(
+    Infinity,
+    ...matches
+      .filter((match) => match.status === "pending")
+      .map((match) => match.round_number),
+  );
+  const activeRoundMatches = matches.filter((match) => match.round_number === activeRound);
   const me = players.find((p) => p.id === meId);
-  const myNextMatch = meId
-    ? matches.find(
-        (m) =>
-          m.status === "pending" &&
-          [m.team1_p1, m.team1_p2, m.team2_p1, m.team2_p2].includes(meId),
-      )
-    : undefined;
+  const myCurrentMatch =
+    meId == null
+      ? undefined
+      : activeRoundMatches.find((match) =>
+          [match.team1_p1, match.team1_p2, match.team2_p1, match.team2_p2].includes(meId),
+        );
+  const myNextMatch =
+    meId == null
+      ? undefined
+      : matches
+          .filter(
+            (match) => match.status === "pending" && match.round_number >= activeRound,
+          )
+          .sort(
+            (first, second) =>
+              first.round_number - second.round_number || first.court - second.court,
+          )
+          .find((match) =>
+            [match.team1_p1, match.team1_p2, match.team2_p1, match.team2_p2].includes(meId),
+          );
 
   /* ---- Écran de sélection du nom ---- */
   if (!me) {
@@ -177,6 +206,11 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
           <Badge tone="lime" className="mb-3">
             {FORMAT_LABELS[event.format]}
           </Badge>
+          {americanoSettings && (
+            <Badge tone="info" className="mb-3 ml-2">
+              {isFixedAmericano ? "Équipes fixes" : "Équipes remixées"}
+            </Badge>
+          )}
           <h1 className="text-2xl font-extrabold mb-1">{event.name}</h1>
           <p className="text-ink-muted mb-6">Qui es-tu ? Sélectionne ton nom pour continuer.</p>
           <ul className="flex flex-col gap-2">
@@ -234,6 +268,14 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
           <Badge tone="lime">{FORMAT_LABELS[event.format]}</Badge>
           {event.status === "active" && <Badge tone="warning">En cours</Badge>}
           {event.status === "completed" && <Badge tone="success">Terminé</Badge>}
+          {americanoSettings && (
+            <Badge tone="info">
+              {isFixedAmericano ? "Équipes fixes" : "Équipes remixées"}
+            </Badge>
+          )}
+          {americanoSettings && event.status !== "draft" && (
+            <Badge tone="muted">Cycle {currentCycle}</Badge>
+          )}
         </div>
         <h1 className="text-2xl font-extrabold mb-5">{event.name}</h1>
 
@@ -249,42 +291,65 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
           <>
             <Podium event={event} players={players} matches={matches} />
             {event.format !== "tournament" && (
-              <Standings players={players} matches={matches} meId={meId} />
+              <Standings event={event} players={players} matches={matches} meId={meId} />
             )}
           </>
         )}
 
         {event.status === "active" && (
           <>
-            {/* Mon prochain match */}
-            {myNextMatch ? (
-              <section className="mb-6 animate-fade-up">
-                <h2 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider text-court mb-2.5">
-                  <span className="size-2 rounded-full bg-lime animate-pulse-soft" aria-hidden />
-                  Ton prochain match
-                </h2>
-                <MatchCard
-                  match={myNextMatch}
-                  playerName={playerName}
-                  meId={meId}
-                  roundTag={event.format === "tournament" ? undefined : `Round ${myNextMatch.round_number}`}
-                  onClick={() => setScoringMatch(myNextMatch)}
-                />
-                <p className="text-xs text-ink-faint mt-2 text-center">
-                  Touche le match pour annoncer le score.
+            {activeRound === Infinity ? (
+              <section className="mb-6 flex items-center gap-3 rounded-(--radius-card) border border-border bg-surface-2 px-4 py-3.5">
+                <PartyPopper className="size-5 shrink-0 text-court" aria-hidden />
+                <p className="text-sm text-ink-muted">
+                  Cycle terminé — en attente de l&apos;organisateur
                 </p>
               </section>
             ) : (
-              <section className="mb-6 flex items-center gap-3 bg-surface-2 border border-border rounded-(--radius-card) px-4 py-3.5">
-                <PartyPopper className="size-5 text-court shrink-0" aria-hidden />
-                <p className="text-sm text-ink-muted">
-                  Pas de match en attente pour toi — repos ou tous tes matchs sont joués.
-                </p>
-              </section>
+              <>
+                {!myCurrentMatch && (
+                  <section className="mb-3 flex items-center gap-3 rounded-(--radius-card) border border-border bg-surface-2 px-4 py-3.5">
+                    <PartyPopper className="size-5 shrink-0 text-court" aria-hidden />
+                    <p className="text-sm text-ink-muted">
+                      {isFixedAmericano
+                        ? "Ton équipe est au repos ce round"
+                        : "Tu es au repos ce round"}
+                    </p>
+                  </section>
+                )}
+                {myNextMatch && (
+                  <section className="mb-6 animate-fade-up">
+                    <h2 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wider text-court mb-2.5">
+                      <span
+                        className="size-2 rounded-full bg-lime animate-pulse-soft"
+                        aria-hidden
+                      />
+                      Ton prochain match
+                    </h2>
+                    <MatchCard
+                      match={myNextMatch}
+                      playerName={playerName}
+                      meId={meId}
+                      roundTag={
+                        event.format === "tournament"
+                          ? undefined
+                          : event.format === "americano"
+                            ? formatRoundLabel(myNextMatch, event.settings)
+                            : `Round ${myNextMatch.round_number}`
+                      }
+                      onClick={() => setScoringMatch(myNextMatch)}
+                    />
+                    <p className="text-xs text-ink-faint mt-2 text-center">
+                      Touche le match pour annoncer le score.
+                    </p>
+                  </section>
+                )}
+              </>
             )}
 
             <Segmented<Tab>
               className="mb-5"
+              ariaLabel="Navigation participant"
               options={[
                 { value: "matches", label: event.format === "tournament" ? "Tableau" : "Tous les matchs" },
                 { value: "standings", label: "Classement" },
@@ -316,7 +381,11 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
                           match={m}
                           playerName={playerName}
                           meId={meId}
-                          roundTag={`Round ${m.round_number}`}
+                          roundTag={
+                            event.format === "americano"
+                              ? formatRoundLabel(m, event.settings)
+                              : `Round ${m.round_number}`
+                          }
                           onClick={m.status === "pending" ? () => setScoringMatch(m) : undefined}
                         />
                       </div>
@@ -331,7 +400,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
                   body="Suis ta progression dans le tableau. Le podium s'affichera à la fin."
                 />
               ) : (
-                <Standings players={players} matches={matches} meId={meId} />
+                <Standings event={event} players={players} matches={matches} meId={meId} />
               ))}
           </>
         )}
