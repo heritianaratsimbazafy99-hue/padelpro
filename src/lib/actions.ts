@@ -1,14 +1,15 @@
 "use client";
 
 import { createClient } from "./supabase/client";
-import type { EventPlayer, Match, PadelEvent } from "./types";
-import {
-  generateAmericanoSchedule,
-  generateMexicanoRound,
-  type PlannedRound,
-} from "./engine/americano";
+import type { EventPlayer, Match, PadelEvent, PreferredSide } from "./types";
+import { generateMexicanoRound, type PlannedRound } from "./engine/americano";
 import { buildBracket, composeTeams } from "./engine/bracket";
 import { computeStandings } from "./engine/standings";
+import {
+  plannedRoundsFromMatches,
+  planAmericanoCycle,
+  type PlannedCycle,
+} from "./event-planning";
 
 function roundsToRows(eventId: string, rounds: PlannedRound[]) {
   return rounds.flatMap((r) =>
@@ -24,21 +25,68 @@ function roundsToRows(eventId: string, rounds: PlannedRound[]) {
   );
 }
 
+export interface RosterPlayerInput {
+  id: string;
+  display_name: string;
+  level: number;
+  seed: number;
+  preferred_side: PreferredSide | null;
+  team_number: number | null;
+}
+
+export async function replaceEventRoster(
+  eventId: string,
+  players: readonly RosterPlayerInput[],
+  roundsPerCycle: number | null,
+): Promise<string | null> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("replace_event_roster", {
+    p_event_id: eventId,
+    p_players: players,
+    p_rounds_per_cycle: roundsPerCycle,
+  });
+  return error?.message ?? null;
+}
+
+async function commitAmericanoCycle(
+  eventId: string,
+  plan: PlannedCycle,
+): Promise<string | null> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("commit_americano_cycle", {
+    p_event_id: eventId,
+    p_expected_cycle: plan.expectedCycle,
+    p_matches: plan.matches,
+  });
+  return error?.message ?? null;
+}
+
+export async function addAmericanoCycle(
+  event: PadelEvent,
+  players: EventPlayer[],
+  matches: Match[],
+): Promise<string | null> {
+  try {
+    return await commitAmericanoCycle(event.id, planAmericanoCycle(event, players, matches));
+  } catch (error) {
+    return error instanceof Error ? error.message : "Génération impossible.";
+  }
+}
+
 /** Lance l'événement : génère les matchs selon le format et passe en "active". */
 export async function startEvent(event: PadelEvent, players: EventPlayer[]): Promise<string | null> {
-  const supabase = createClient();
   const enginePlayers = players.map((p) => ({
     id: p.id,
     level: p.level,
     side: p.preferred_side,
   }));
-  const { courts, rounds, pairing } = event.settings;
+  const { courts, pairing } = event.settings;
 
   let rows: Array<Record<string, unknown>> = [];
 
   try {
     if (event.format === "americano") {
-      rows = roundsToRows(event.id, generateAmericanoSchedule(enginePlayers, rounds, courts, pairing));
+      return await commitAmericanoCycle(event.id, planAmericanoCycle(event, players, []));
     } else if (event.format === "mexicano") {
       // Round 1 : ordre initial selon le mode (niveau ou aléatoire), ensuite le classement décide.
       const ranked =
@@ -70,6 +118,7 @@ export async function startEvent(event: PadelEvent, players: EventPlayer[]): Pro
     return e instanceof Error ? e.message : "Génération impossible.";
   }
 
+  const supabase = createClient();
   const { error: mErr } = await supabase.from("matches").insert(rows);
   if (mErr) return mErr.message;
 
@@ -96,25 +145,10 @@ export async function nextMexicanoRound(
   }));
 
   // Reconstruit l'historique (byes) à partir des matchs déjà joués.
-  const playedRounds: PlannedRound[] = [];
-  const byRound = new Map<number, Match[]>();
-  for (const m of matches) {
-    byRound.set(m.round_number, [...(byRound.get(m.round_number) ?? []), m]);
-  }
-  for (const [roundNumber, ms] of byRound) {
-    const inMatch = new Set(
-      ms.flatMap((m) => [m.team1_p1, m.team1_p2, m.team2_p1, m.team2_p2]).filter(Boolean) as string[],
-    );
-    playedRounds.push({
-      roundNumber,
-      matches: ms.map((m) => ({
-        court: m.court,
-        team1: [m.team1_p1!, m.team1_p2!],
-        team2: [m.team2_p1!, m.team2_p2!],
-      })),
-      resting: players.filter((p) => !inMatch.has(p.id)).map((p) => p.id),
-    });
-  }
+  const playedRounds = plannedRoundsFromMatches(
+    players.map((player) => player.id),
+    matches,
+  );
 
   const nextNumber = Math.max(0, ...matches.map((m) => m.round_number)) + 1;
   const round = generateMexicanoRound(ranked, nextNumber, event.settings.courts, playedRounds);
