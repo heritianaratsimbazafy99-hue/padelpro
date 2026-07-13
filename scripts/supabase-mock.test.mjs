@@ -396,3 +396,149 @@ test("roster UUIDs are canonical and case-insensitive", async () => {
     /invalid_roster_payload/,
   );
 });
+
+test("null scores stay pending and keep completion and the next cycle blocked", async () => {
+  const scoredEvent = await insert("events", {
+    organizer_id: event.organizer_id,
+    format: "americano",
+    name: "Null Score Guard",
+    settings: {
+      points_per_match: 24,
+      courts: 1,
+      rounds: 3,
+      pairing: "random",
+      team_mode: "fixed",
+      composition: "manual",
+      rounds_per_cycle: 3,
+    },
+  });
+  const roster = await replaceRoster(scoredEvent.id, sixFixedPlayerRows(), 3);
+  await rpc("commit_americano_cycle", cyclePayload(scoredEvent.id, roster, 1));
+  const [target, ...otherMatches] = await select("matches", `event_id=eq.${scoredEvent.id}`);
+
+  await assert.rejects(
+    () => rpc("report_score", {
+      p_match_id: target.id,
+      p_share_code: scoredEvent.share_code,
+      p_score1: null,
+      p_score2: 24,
+      p_reporter: "Null Score",
+    }),
+    /invalid_score/,
+  );
+
+  const [unchanged] = await select("matches", `id=eq.${target.id}`);
+  assert.equal(unchanged.status, "pending");
+  assert.equal(unchanged.score1, null);
+  assert.equal(unchanged.score2, null);
+
+  for (const match of otherMatches) {
+    await rpc("report_score", {
+      p_match_id: match.id,
+      p_share_code: scoredEvent.share_code,
+      p_score1: 12,
+      p_score2: 12,
+      p_reporter: "Null Score",
+    });
+  }
+  await assert.rejects(
+    () => patchEvent(scoredEvent.id, { status: "completed" }),
+    /cycle_incomplete/,
+  );
+  await assert.rejects(
+    () => rpc("commit_americano_cycle", cyclePayload(scoredEvent.id, roster, 2)),
+    /cycle_incomplete/,
+  );
+});
+
+test("a claimed player cannot be reassigned to a second profile", async () => {
+  const first = await json("/auth/v1/signup", "POST", {
+    email: "claim-first@test.fr",
+    password: "MotDePasse!123",
+    data: { display_name: "Premier Claim" },
+  }, null);
+  const second = await json("/auth/v1/signup", "POST", {
+    email: "claim-second@test.fr",
+    password: "MotDePasse!123",
+    data: { display_name: "Second Claim" },
+  }, null);
+  const claimEvent = await insert("events", {
+    organizer_id: event.organizer_id,
+    format: "mexicano",
+    name: "Claim Ownership",
+    settings: { points_per_match: 24, courts: 1, rounds: 3 },
+  });
+  const roster = await replaceRoster(claimEvent.id, sixRemixedPlayerRows());
+  const player = roster[0];
+
+  await rpc("claim_player", {
+    p_player_id: player.id,
+    p_share_code: claimEvent.share_code,
+  }, first.access_token);
+  await assert.rejects(
+    () => rpc("claim_player", {
+      p_player_id: player.id,
+      p_share_code: claimEvent.share_code,
+    }, second.access_token),
+    /player_or_code_invalid/,
+  );
+
+  const [claimed] = await select("event_players", `id=eq.${player.id}`);
+  assert.equal(claimed.profile_id, first.user.id);
+});
+
+test("Mexicano and tournament matches reject players from another event", async () => {
+  const foreignEvent = await insert("events", {
+    organizer_id: event.organizer_id,
+    format: "mexicano",
+    name: "Foreign Roster",
+    settings: { points_per_match: 24, courts: 1, rounds: 3 },
+  });
+  const foreignRoster = await replaceRoster(foreignEvent.id, sixRemixedPlayerRows());
+
+  for (const format of ["mexicano", "tournament"]) {
+    const ownEvent = await insert("events", {
+      organizer_id: event.organizer_id,
+      format,
+      name: `Cross Event ${format}`,
+      settings: { points_per_match: 24, courts: 1, rounds: 3 },
+    });
+    const ownRoster = await replaceRoster(ownEvent.id, sixRemixedPlayerRows());
+    const match = directMatchPayload(ownEvent.id, ownRoster, {
+      team2_p2: foreignRoster[0].id,
+      ...(format === "tournament" ? { bracket_pos: 1 } : {}),
+    });
+
+    await assert.rejects(
+      () => insert("matches", match),
+      /match_write_forbidden/,
+    );
+    assert.equal((await select("matches", `event_id=eq.${ownEvent.id}`)).length, 0);
+  }
+});
+
+test("Mexicano matches cannot be inserted after event completion", async () => {
+  const completed = await insert("events", {
+    organizer_id: event.organizer_id,
+    format: "mexicano",
+    name: "Completed Mexicano",
+    settings: { points_per_match: 24, courts: 1, rounds: 3 },
+  });
+  const roster = await replaceRoster(completed.id, sixRemixedPlayerRows());
+  const first = await insert("matches", directMatchPayload(completed.id, roster));
+  await patchEvent(completed.id, { status: "active" });
+  await rpc("report_score", {
+    p_match_id: first.id,
+    p_share_code: completed.share_code,
+    p_score1: 12,
+    p_score2: 12,
+    p_reporter: "Completed Guard",
+  });
+  await patchEvent(completed.id, { status: "completed" });
+
+  await assert.rejects(
+    () => insert("matches", directMatchPayload(completed.id, roster, { round_number: 2 })),
+    /match_write_forbidden/,
+  );
+  assert.equal((await select("matches", `event_id=eq.${completed.id}`)).length, 1);
+});

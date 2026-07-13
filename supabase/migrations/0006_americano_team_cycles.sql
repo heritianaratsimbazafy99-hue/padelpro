@@ -6,6 +6,13 @@ alter table public.event_players
 alter table public.matches
   add column cycle_number integer not null default 1 check (cycle_number > 0);
 
+-- Les lignes historiques ne bloquent pas le déploiement, mais toute nouvelle
+-- écriture doit désormais fournir deux scores pour un match terminé.
+alter table public.matches
+  add constraint matches_done_scores_present
+  check (status <> 'done' or (score1 is not null and score2 is not null))
+  not valid;
+
 create unique index matches_event_cycle_round_court_unique
   on public.matches (event_id, cycle_number, round_number, court)
   where bracket_pos is null;
@@ -35,6 +42,7 @@ declare
   v_logical_rounds integer;
   v_matches_per_logical integer;
   v_staging_prefix text;
+  v_upserted_count integer;
 begin
   select * into v_event
   from public.events
@@ -55,6 +63,31 @@ begin
 
   begin
     v_player_count := jsonb_array_length(p_players);
+    if exists (
+      select 1
+      from jsonb_array_elements(p_players) as item(value)
+      where jsonb_typeof(item.value) is distinct from 'object'
+        or jsonb_typeof(item.value -> 'id') is distinct from 'string'
+        or jsonb_typeof(item.value -> 'display_name') is distinct from 'string'
+        or jsonb_typeof(item.value -> 'level') is distinct from 'number'
+        or jsonb_typeof(item.value -> 'seed') is distinct from 'number'
+        or (
+          item.value ? 'preferred_side'
+          and jsonb_typeof(item.value -> 'preferred_side') not in ('string', 'null')
+        )
+        or (
+          item.value ? 'team_number'
+          and jsonb_typeof(item.value -> 'team_number') not in ('number', 'null')
+        )
+        or mod((item.value ->> 'level')::numeric, 1) <> 0
+        or mod((item.value ->> 'seed')::numeric, 1) <> 0
+        or (
+          jsonb_typeof(item.value -> 'team_number') = 'number'
+          and mod((item.value ->> 'team_number')::numeric, 1) <> 0
+        )
+    ) then
+      raise exception 'invalid_roster_payload';
+    end if;
     if exists (
       with payload as (
         select * from jsonb_to_recordset(p_players) as x(
@@ -176,6 +209,11 @@ begin
       team_number = excluded.team_number
     where ep.event_id = p_event_id;
 
+    get diagnostics v_upserted_count = row_count;
+    if v_upserted_count <> v_player_count then
+      raise exception 'invalid_roster_payload';
+    end if;
+
     return query
     select * from public.event_players ep
     where ep.event_id = p_event_id
@@ -200,18 +238,268 @@ grant execute on function public.replace_event_roster(uuid, jsonb, integer)
 -- Les insertions directes restent nécessaires pour Mexicano et tournoi. Les
 -- mises à jour de score/avancement passent déjà par report_score.
 drop policy if exists "matches_write_organizer" on public.matches;
+drop policy if exists "matches_insert_organizer_non_americano" on public.matches;
 
 create policy "matches_insert_organizer_non_americano" on public.matches
   for insert to authenticated
   with check (exists (
     select 1 from public.events e
-    where e.id = event_id
+    where e.id = matches.event_id
       and e.organizer_id = auth.uid()
       and (
         (e.status = 'draft' and e.format in ('mexicano', 'tournament'))
         or (e.status = 'active' and e.format = 'mexicano')
       )
+      and (
+        matches.team1_p1 is null
+        or exists (
+          select 1 from public.event_players ep
+          where ep.id = matches.team1_p1 and ep.event_id = matches.event_id
+        )
+      )
+      and (
+        matches.team1_p2 is null
+        or exists (
+          select 1 from public.event_players ep
+          where ep.id = matches.team1_p2 and ep.event_id = matches.event_id
+        )
+      )
+      and (
+        matches.team2_p1 is null
+        or exists (
+          select 1 from public.event_players ep
+          where ep.id = matches.team2_p1 and ep.event_id = matches.event_id
+        )
+      )
+      and (
+        matches.team2_p2 is null
+        or exists (
+          select 1 from public.event_players ep
+          where ep.id = matches.team2_p2 and ep.event_id = matches.event_id
+        )
+      )
   ));
+
+-- La policy protège l'accès direct; ce trigger verrouille en plus l'événement
+-- afin de sérialiser un insert Mexicano avec une complétion concurrente.
+create or replace function public.guard_non_americano_match_insert()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_event public.events%rowtype;
+begin
+  select * into v_event
+  from public.events
+  where id = new.event_id
+  for update;
+
+  if not found then
+    raise exception 'match_write_forbidden';
+  end if;
+  if new.team1_p1 is not null then
+    perform ep.id from public.event_players ep
+    where ep.id = new.team1_p1 and ep.event_id = new.event_id;
+    if not found then raise exception 'match_write_forbidden'; end if;
+  end if;
+  if new.team1_p2 is not null then
+    perform ep.id from public.event_players ep
+    where ep.id = new.team1_p2 and ep.event_id = new.event_id;
+    if not found then raise exception 'match_write_forbidden'; end if;
+  end if;
+  if new.team2_p1 is not null then
+    perform ep.id from public.event_players ep
+    where ep.id = new.team2_p1 and ep.event_id = new.event_id;
+    if not found then raise exception 'match_write_forbidden'; end if;
+  end if;
+  if new.team2_p2 is not null then
+    perform ep.id from public.event_players ep
+    where ep.id = new.team2_p2 and ep.event_id = new.event_id;
+    if not found then raise exception 'match_write_forbidden'; end if;
+  end if;
+  if v_event.format = 'americano' then
+    return new;
+  end if;
+  if auth.uid() is null or v_event.organizer_id is distinct from auth.uid() then
+    raise exception 'match_write_forbidden';
+  end if;
+  if not (
+    (v_event.status = 'draft' and v_event.format in ('mexicano', 'tournament'))
+    or (v_event.status = 'active' and v_event.format = 'mexicano')
+  ) then
+    raise exception 'match_write_forbidden';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists guard_non_americano_match_insert on public.matches;
+create trigger guard_non_americano_match_insert
+  before insert on public.matches
+  for each row execute function public.guard_non_americano_match_insert();
+
+revoke execute on function public.guard_non_americano_match_insert()
+  from public, anon, authenticated;
+
+create or replace function public.report_score(
+  p_match_id uuid,
+  p_share_code text,
+  p_score1 integer,
+  p_score2 integer,
+  p_reporter text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_match public.matches%rowtype;
+  v_event public.events%rowtype;
+  v_points integer;
+  v_winner_p1 uuid;
+  v_winner_p2 uuid;
+begin
+  select * into v_match
+  from public.matches
+  where id = p_match_id;
+  if not found then
+    raise exception 'match_not_found';
+  end if;
+
+  select * into v_event
+  from public.events
+  where id = v_match.event_id
+    and share_code = upper(p_share_code)
+  for update;
+  if not found then
+    raise exception 'invalid_share_code';
+  end if;
+
+  -- Le verrou événement précède toute validation et toute mutation du score.
+  select * into v_match
+  from public.matches
+  where id = p_match_id and event_id = v_event.id
+  for update;
+  if not found then
+    raise exception 'match_not_found';
+  end if;
+
+  if v_event.status <> 'active' then
+    raise exception 'event_not_active';
+  end if;
+  if p_score1 is null or p_score2 is null or p_score1 < 0 or p_score2 < 0 then
+    raise exception 'invalid_score';
+  end if;
+
+  if v_event.format in ('americano', 'mexicano') then
+    v_points := coalesce((v_event.settings ->> 'points_per_match')::integer, 0);
+    if v_points > 0 and p_score1 + p_score2 <> v_points then
+      raise exception 'score_sum_mismatch';
+    end if;
+  elsif p_score1 = p_score2 then
+    raise exception 'draw_not_allowed';
+  end if;
+
+  update public.matches
+  set score1 = p_score1,
+      score2 = p_score2,
+      status = 'done',
+      reported_by = coalesce(p_reporter, reported_by)
+  where id = p_match_id;
+
+  if v_event.format = 'tournament' and v_match.next_match_pos is not null then
+    if p_score1 > p_score2 then
+      v_winner_p1 := v_match.team1_p1;
+      v_winner_p2 := v_match.team1_p2;
+    else
+      v_winner_p1 := v_match.team2_p1;
+      v_winner_p2 := v_match.team2_p2;
+    end if;
+    if v_match.next_match_slot = 1 then
+      update public.matches
+      set team1_p1 = v_winner_p1, team1_p2 = v_winner_p2
+      where event_id = v_match.event_id and bracket_pos = v_match.next_match_pos;
+    else
+      update public.matches
+      set team2_p1 = v_winner_p1, team2_p2 = v_winner_p2
+      where event_id = v_match.event_id and bracket_pos = v_match.next_match_pos;
+    end if;
+  end if;
+end;
+$$;
+
+revoke execute on function public.report_score(uuid, text, integer, integer, text)
+  from public;
+grant execute on function public.report_score(uuid, text, integer, integer, text)
+  to anon, authenticated;
+
+create or replace function public.claim_player(
+  p_player_id uuid,
+  p_share_code text
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_event_id uuid;
+  v_player public.event_players%rowtype;
+  v_updated integer;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  -- Respecte le même ordre de verrous que replace_event_roster : événement,
+  -- puis joueur. La première lecture ne verrouille rien et est revalidée après.
+  select ep.event_id into v_event_id
+  from public.event_players ep
+  where ep.id = p_player_id;
+  if not found then
+    raise exception 'player_or_code_invalid';
+  end if;
+
+  perform e.id
+  from public.events e
+  where e.id = v_event_id
+    and e.share_code = upper(p_share_code)
+  for update;
+  if not found then
+    raise exception 'player_or_code_invalid';
+  end if;
+
+  select ep.* into v_player
+  from public.event_players ep
+  where ep.id = p_player_id and ep.event_id = v_event_id
+  for update;
+
+  if not found
+    or (v_player.profile_id is not null and v_player.profile_id is distinct from auth.uid()) then
+    raise exception 'player_or_code_invalid';
+  end if;
+
+  update public.event_players ep
+  set profile_id = auth.uid(),
+      preferred_side = coalesce(
+        (select pr.preferred_side from public.profiles pr where pr.id = auth.uid()),
+        ep.preferred_side
+      )
+  where ep.id = p_player_id
+    and (ep.profile_id is null or ep.profile_id = auth.uid());
+
+  get diagnostics v_updated = row_count;
+  if v_updated <> 1 then
+    raise exception 'player_or_code_invalid';
+  end if;
+end;
+$$;
+
+revoke execute on function public.claim_player(uuid, text) from public, anon;
+grant execute on function public.claim_player(uuid, text) to authenticated;
 
 create or replace function public.guard_event_after_launch()
 returns trigger
@@ -245,7 +533,8 @@ begin
     end if;
     if exists (
       select 1 from public.matches m
-      where m.event_id = old.id and m.status <> 'done'
+      where m.event_id = old.id
+        and (m.status <> 'done' or m.score1 is null or m.score2 is null)
     ) then
       raise exception 'cycle_incomplete';
     end if;
@@ -335,7 +624,7 @@ begin
     select 1 from public.matches m
     where m.event_id = p_event_id
       and m.cycle_number = v_current_cycle
-      and m.status <> 'done'
+      and (m.status <> 'done' or m.score1 is null or m.score2 is null)
   ) then
     raise exception 'cycle_incomplete';
   end if;

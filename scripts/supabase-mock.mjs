@@ -181,7 +181,14 @@ function rpcReportScore(p) {
   if (!event || event.share_code !== String(p.p_share_code || "").toUpperCase())
     throw pgError("invalid_share_code");
   if (event.status !== "active") throw pgError("event_not_active");
-  if (p.p_score1 < 0 || p.p_score2 < 0) throw pgError("invalid_score");
+  if (
+    !isPgInteger(p.p_score1) ||
+    !isPgInteger(p.p_score2) ||
+    p.p_score1 < 0 ||
+    p.p_score2 < 0
+  ) {
+    throw pgError("invalid_score");
+  }
   if (["americano", "mexicano"].includes(event.format)) {
     const pts = Number(event.settings?.points_per_match ?? 0);
     if (pts > 0 && p.p_score1 + p.p_score2 !== pts) throw pgError("score_sum_mismatch");
@@ -217,8 +224,14 @@ function rpcClaimPlayer(p, user) {
   const playerId = canonicalUuid(p.p_player_id);
   const player = db.event_players.find((ep) => canonicalUuid(ep.id) === playerId);
   const event = player && db.events.find((e) => e.id === player.event_id);
-  if (!player || !event || event.share_code !== String(p.p_share_code || "").toUpperCase())
+  if (
+    !player ||
+    !event ||
+    event.share_code !== String(p.p_share_code || "").toUpperCase() ||
+    (player.profile_id != null && player.profile_id !== user.id)
+  ) {
     throw pgError("player_or_code_invalid");
+  }
   player.profile_id = user.id;
   // Réplique SQL : copie du côté préféré depuis le profil au claim.
   const profile = db.profiles.find((pr) => pr.id === user.id);
@@ -308,10 +321,23 @@ function directMatchInsertAllowed(row, user) {
   const eventId = canonicalUuid(row.event_id);
   const event = db.events.find((candidate) => canonicalUuid(candidate.id) === eventId);
   if (!event || event.organizer_id !== user.id) return false;
-  return (
+  const statusAllowed =
     (event.status === "draft" && ["mexicano", "tournament"].includes(event.format)) ||
-    (event.status === "active" && event.format === "mexicano")
+    (event.status === "active" && event.format === "mexicano");
+  if (!statusAllowed) return false;
+  return MATCH_PLAYER_FIELDS.every(
+    (field) =>
+      row[field] == null ||
+      db.event_players.some(
+        (player) =>
+          canonicalUuid(player.id) === canonicalUuid(row[field]) &&
+          canonicalUuid(player.event_id) === eventId,
+      ),
   );
+}
+
+function matchDoneScoresPresent(row) {
+  return row?.status !== "done" || (row.score1 != null && row.score2 != null);
 }
 
 function matchCycleRoundCourtKey(row) {
@@ -452,7 +478,9 @@ function rpcCommitAmericanoCycle(p, user) {
   if (
     p.p_expected_cycle > 1 &&
     eventMatches.some(
-      (match) => Number(match.cycle_number ?? 1) === currentCycle && match.status !== "done",
+      (match) =>
+        Number(match.cycle_number ?? 1) === currentCycle &&
+        (match.status !== "done" || match.score1 == null || match.score2 == null),
     )
   ) {
     throw pgError("cycle_incomplete");
@@ -876,6 +904,15 @@ const server = http.createServer(async (req, res) => {
             hint: null,
           });
         }
+        if (input.some((row) => !matchDoneScoresPresent(row))) {
+          return send(res, 400, {
+            code: "23514",
+            message:
+              'new row for relation "matches" violates check constraint "matches_done_scores_present"',
+            details: null,
+            hint: null,
+          });
+        }
 
         const occupied = new Set(
           db.matches.map(matchCycleRoundCourtKey).filter((key) => key !== null),
@@ -937,7 +974,14 @@ const server = http.createServer(async (req, res) => {
             if (oldEvent.status !== "active") {
               return send(res, 400, { code: "P0001", message: "event_not_active" });
             }
-            if (matches.some((candidate) => candidate.status !== "done")) {
+            if (
+              matches.some(
+                (candidate) =>
+                  candidate.status !== "done" ||
+                  candidate.score1 == null ||
+                  candidate.score2 == null,
+              )
+            ) {
               return send(res, 400, { code: "P0001", message: "cycle_incomplete" });
             }
           }
